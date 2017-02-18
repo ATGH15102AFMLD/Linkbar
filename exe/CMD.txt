@@ -1,0 +1,14 @@
+-d[param] 
+Set startup delay 
+[param] = time in milliseconds
+ 
+-l[param] 
+Set UI language
+[param] = 1033 (English), 1036 (French), 1031 (German), 1041 (Japanese), 1049 (Russian) 
+ 
+-f[param] 
+Set path to configuration file
+[param] = path to *.lbr 
+ 
+-n
+Open "New Linkbar" dialog
