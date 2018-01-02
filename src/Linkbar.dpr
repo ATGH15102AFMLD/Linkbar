@@ -8,8 +8,6 @@ program Linkbar;
 {$i linkbar.inc}
 
 uses
-  Linkbar.ResStr,  // If this unit not place first then 32- and 64-bit verision have
-                   // different resource string identificator
   Windows,
   SysUtils,
   Forms,
@@ -24,7 +22,7 @@ uses
   mUnit in 'mUnit.pas',
   Linkbar.Newbar,
   Linkbar.Shell,
-  Linkbar.Loc,
+  Linkbar.L10n,
   Linkbar.Settings in 'Linkbar.Settings.pas' {FrmProperties};
 
 {$R *.res}
@@ -71,9 +69,8 @@ begin
                                                                                 //-----------------------
                                                                                 // Apply localization
                                                                                 //-----------------------
-  if FindCmdLineSwitch(CLK_LANG, cmd, True)
-  then LbTranslateInit( StrToIntDef(cmd, 0) )
-  else LbTranslateInit(0);
+  FindCmdLineSwitch(CLK_LANG, cmd, True);
+  L10nLoad(ExtractFilePath(ParamStr(0)) + DN_LOCALES, cmd);
 
   if FindCmdLineSwitch(CLK_NEW, True)
   then begin
@@ -129,10 +126,11 @@ begin
           Continue;
         end;
 
-        LBCreateProcess(ParamStr(0),
-            LBCreateCommandParam(CLK_LANG, IntToStr(LbLangID))
-          + LBCreateCommandParam(CLK_FILE, sl[i])
-          );
+        cmd := LBCreateCommandParam(CLK_FILE, sl[i]);
+        if (Locale <> '')
+        then cmd := LBCreateCommandParam(CLK_LANG, Locale) + cmd;
+
+        LBCreateProcess(ParamStr(0), cmd);
         Inc(CreatedPanels);
       end;
 

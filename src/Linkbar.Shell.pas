@@ -47,7 +47,7 @@ uses
 
 implementation
 
-uses Linkbar.OS, Linkbar.Consts, Linkbar.Loc, StrUtils, Graphics;
+uses StrUtils, Graphics, Linkbar.OS, Linkbar.Consts, Linkbar.L10n;
 
 type
   TSHExtractIconsW = function(pszFileName: LPCWSTR; nIconIndex: Integer; cxIcon,
@@ -263,7 +263,7 @@ var
   cmd: string;
 begin
   Result := S_FALSE;
-  lnkname := MUILoadResString(GetModuleHandle(LB_FN_NEWSHORTCUT), LB_RS_NSC_FILENAME);
+  lnkname := L10nMui(GetModuleHandle(LB_FN_NEWSHORTCUT), LB_RS_NSC_FILENAME);
   if PathMakeUniqueName(filename, MAX_PATH, 'scut.lnk', PChar(lnkname + '.lnk'), PChar(APath))
   then begin
     hFile := CreateFile(filename, GENERIC_WRITE, 0, nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);

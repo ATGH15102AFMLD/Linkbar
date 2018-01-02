@@ -96,7 +96,7 @@ begin
   if IsWindows10
   then begin
     // Set window accent policy
-    // http://withinrafael.com/adding-the-aero-glass-blur-to-your-windows-10-apps/
+    // https://withinrafael.com/2015/07/08/adding-the-aero-glass-blur-to-your-windows-10-apps/
     if Assigned(UDwmSetWindowCompositionAttributeProc)
     then begin
       AccentPolicy.AccentState := U_WCA_ACCENT_STATE_ENABLE_BLURBEHIND;

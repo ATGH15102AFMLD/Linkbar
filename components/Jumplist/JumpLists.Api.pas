@@ -89,7 +89,7 @@ implementation
 uses Winapi.PropSys, Winapi.PropKey, Winapi.KnownFolders, Winapi.ShLwApi,
      Winapi.ObjectArray, Winapi.CommCtrl,
      System.Win.Registry,
-     Linkbar.OS, Linkbar.Loc;
+     Linkbar.OS, Linkbar.L10n;
 
 const
 // In Delphi XE3 the following constants are not defined
@@ -654,13 +654,13 @@ begin
         if (iType = 1)
         then begin
           oGroup.eType := jgFrequent;
-          oGroup.Name := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_FREQUENT);
+          oGroup.Name := L10NFind('Jumplist.Frequent', 'Frequent');
           GetKnownCategory(AAppId, oGroup, ADLT_FREQUENT);
         end
         else if (iType = 2)
         then begin
           oGroup.eType := jgRecent;
-          oGroup.Name := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_RECENT);
+          oGroup.Name := L10NFind('Jumplist.Recent', 'Recent');
           GetKnownCategory(AAppId, oGroup, ADLT_RECENT);
         end;
       end
@@ -684,7 +684,7 @@ begin
             Dec(groupIdx);
             oGroup := AList.Groups[customheader.iGroupCount+1];
           end;
-          oGroup.Name := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_TASKS);
+          oGroup.Name := L10NFind('Jumplist.Tasks', 'Tasks');
           oGroup.eType := jgTasks;
         end;
 
@@ -714,7 +714,7 @@ begin
     AList.Groups.Add(oGroup);
     oGroup := TJumpGroup.Create;
     oGroup.eType := jgRecent;
-    oGroup.Name := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_RECENT);
+    oGroup.Name := L10NFind('Jumplist.Recent', 'Recent');
     GetKnownCategory(AAppId, oGroup, ADLT_RECENT);
     AList.Groups.Add(oGroup);
   end;
@@ -722,7 +722,7 @@ begin
   // update pinned items
   oGroupPinned := AList.Groups[0];
   oGroupPinned.eType := jgPinned;
-  oGroupPinned.Name := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_PINNED);
+  oGroupPinned.Name := L10NFind('Jumplist.Pinned', 'Pinned');
 
   // read the DestList stream as described here: http://www.forensicswiki.org/wiki/Jump_Lists
   pStorage := nil;

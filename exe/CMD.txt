@@ -4,7 +4,15 @@ Set startup delay
  
 -l[param] 
 Set UI language
-[param] = 1033 (English), 1036 (French), 1031 (German), 1041 (Japanese), 1049 (Russian) 
+[param] = 1033 or en-US (English)
+          1036 or fr-FR (French)
+          1031 or de-DE (German)
+          1032 or el-GR (Greek)
+          1041 or ja-JP (Japanese)
+          1045 or pl-PL (Polish)
+          1049 or ru-RU (Russian)
+          2052 or zh-CN (Chinese-Simplified)
+          1042 or ko-KR (Korean)
  
 -f[param] 
 Set path to configuration file

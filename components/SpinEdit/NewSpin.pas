@@ -11,10 +11,6 @@ uses
   Windows, Classes, StdCtrls, ExtCtrls, Controls, Messages, SysUtils,
   Forms, Graphics, Menus, Buttons, ComCtrls;
 
-const
-  InitRepeatPause = 400;  { pause before repeat timer (ms) }
-  RepeatPause     = 100;  { pause before hint window displays (ms)}
-
 type
 
   TTimerSpeedButton = class;
@@ -173,6 +169,10 @@ type
 implementation
 
 uses Themes;
+  
+const
+  InitRepeatPause = 400;  { pause before repeat timer (ms) }
+  RepeatPause     = 100;  { pause before hint window displays (ms)}
 
 procedure Register;
 begin

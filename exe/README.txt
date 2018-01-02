@@ -8,10 +8,10 @@ Note:
 1) Linkbar support Windows Vista and above
 2) Linkbar work with .lnk, .url and .website files
 
-Version: 1.6.6
+Version: 1.6.7
 License type: Freeware
 OS: Windows Vista/7/8/8.1/10
-Languages: English (default), French, German, Japanese, Russian, localization support (see LOCALIZATION.TXT)
+Languages: English (default), Chinese-Simplified, French, German, Greek, Japanese, Korean, Polish, Russian, localization support
 Email: linkbar@yandex.ru
 
 ===============================================================================
@@ -23,17 +23,20 @@ Email: linkbar@yandex.ru
 - Classic Shell
 - DelLocXE 
 - GunSmoker-a blog
+- Localizers
 - MSDN
 - Near users
 - Ru-Board community
 - StartIsBack
-- Takahiro
 - Unknown programmers from internet
 
 ===============================================================================
 
 == Links
 ===============================================================================
+
+- Source code: 
+	https://github.com/ATGH15102AFMLD/Linkbar
 
 - Project page on Sourceforge: 
 	https://sourceforge.net/projects/linkbar/
@@ -50,6 +53,26 @@ Email: linkbar@yandex.ru
 ===============================================================================
 
 == History
+===============================================================================
+
+== Version 1.6.7 general release (Dec, 2017):
+
+add: New localization system. Simple and clear
+add: Chinese-Simplified localization (Hue Liu)
+add: Greek localization (geogeo.gr)
+add: Korean localization (미유키로즈)
+add: Polish localization (Galileusz)
+add: AutoHide by Keyboard shortcut
+add: Restoring the panels after restarting Explorer.exe
+add: Keyboard control. Arrows, Spacebar/Enter, Menu, F2, Delete(+Shift) and Esc supported
+add: Jumplist keyboard control
+add: Option for disable Jumplists
+add: Option "Keep the Linkbar on top of other windows"
+del: Old localization files - Linkbar.lc3, LOCALIZATION.txt
+fix: Exception on closing if the Properties is open
+fix: Multiple separators in Shell menu (e.g. for a shortcut to an HTML-file)
+fix: Incorrect behavior in negative desktop coordinates
+
 ===============================================================================
 
 == Version 1.6.6 general release (Feb, 2017):

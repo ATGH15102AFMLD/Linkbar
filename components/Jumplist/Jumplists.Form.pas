@@ -26,6 +26,8 @@ type
     IsLatesPinned: Boolean;
     Pinnable: Boolean;
     Caption: string;
+    function IsSelectable: Boolean;
+    function IsHeader: Boolean;
   end;
 
   TVtList = TList<TVtItem>;
@@ -48,6 +50,7 @@ type
     FAlign: TJumplistAlign;
     FVtList: TVtList;
     FPopupMenuVisible: Boolean;
+    FHotSelectedByMouse: Boolean;
     oBgBmp: TBitmap;
     oIconCache: TIconCache;
     RectBody: TRect;
@@ -57,6 +60,7 @@ type
     procedure OnFormContextPopup(Sender: TObject; MousePos: TPoint;
       var Handled: Boolean);
     procedure OnFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure CMDialogKey(var AMsg: TCMDialogKey); message CM_DIALOGKEY;
     procedure OnFormMouseLeave(Sender: TObject);
     procedure OnFormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure OnFormMouseDown(Sender: TObject; Button: TMouseButton;
@@ -68,6 +72,7 @@ type
     procedure OnJumpListRemove(Sender: TObject);
     procedure OnJumpListExecute(Sender: TObject);
     function ScaleDimension(const X: Integer): Integer;
+    procedure KeyboardControl(const AKeyCode: Word);
   private
     hImageList: HIMAGELIST;
     function ExtractIcon(AItem: IUnknown; AItemType: TJumpItemType): Integer;
@@ -88,7 +93,7 @@ type
     procedure SetHotIndex(AValue: integer);
     procedure AlphaBlendAndClose;
     function PinSelected: boolean; inline;
-    function Index: Integer; inline;
+    function Index: Integer;// inline;
   private
     TipHwnd: HWND;
     TipPinText: string;
@@ -101,6 +106,8 @@ type
     procedure PrepareTooltips;
     function GetDescription(const AItem: TVtItem; const AText: PChar; ASize: Integer): Boolean;
     procedure WMTimer(var Message: TMessage); message WM_TIMER;
+  private
+    TempX, TempY: Integer;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
     procedure PaintWindow(DC: HDC); override;
@@ -119,7 +126,7 @@ type
 implementation
 
 uses Math, Vcl.Themes, Winapi.Dwmapi, Winapi.ShellAPI, Winapi.ShLwApi,
-  Winapi.ActiveX, Winapi.UxTheme, Linkbar.OS, Linkbar.Loc, Linkbar.Shell,
+  Winapi.ActiveX, Winapi.UxTheme, Linkbar.OS, Linkbar.L10n, Linkbar.Shell,
   Jumplists.Themes, ExplorerMenu, System.Win.Registry;
 
 const
@@ -155,16 +162,27 @@ var
   TextColorItemSelected: TColor;
   TextColorItemNew: TColor;
 
+{ TVtItem }
+
+function TVtItem.IsSelectable: Boolean;
+begin
+  Result := Style in [vtItem, vtFooter];
+end;
+
+function TVtItem.IsHeader: Boolean;
+begin
+  Result := not IsSelectable;
+end;
+
 // Macros from windowsx.h:   
 // Important  Do not use the LOWORD or HIWORD macros to extract the x- and y-
 // coordinates of the cursor position because these macros return incorrect results
 // on systems with multiple monitors. Systems with multiple monitors can have
 // negative x- and y- coordinates, and LOWORD and HIWORD treat the coordinates
 // as unsigned quantities.
-
-function MakePoint(const Param : DWord): TPoint; inline;
+function MakePoint(const L: DWORD): TPoint; inline;
 Begin
-  Result := TPoint.Create(Param and $FFFF, Param shr 16);
+  Result := TPoint.Create(SmallInt(L and $FFFF), SmallInt(L shr 16));
 End;
 
 procedure JumpListClose;
@@ -449,8 +467,8 @@ begin
   TipHideTime := TipShowTime * 10;
 
   // Get pin/unpin button hint text
-  TipUnpinText := StripHotkey( MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_UNPIN) );
-  TipPinText := StripHotkey( MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_PIN) );
+  TipUnpinText := StripHotkey( L10NFind('Jumplist.UnpinTip', 'Unpin from this list') );
+  TipPinText := StripHotkey( L10NFind('Jumplist.PinTip', 'Pin to this list') );
 
   LastPinUnpinHash := 0;
   TipHwnd := 0;
@@ -747,26 +765,34 @@ procedure TFormJumpList.OnFormContextPopup(Sender: TObject; MousePos: TPoint;
   var Handled: Boolean);
 var vi: TVtItem;
     shift: Boolean;
+    pt: TPoint;
 begin
   Handled := True;
   if (Index <> INDEX_NONE)
   then begin
     vi := FVtList[Index];
+
+    // Keyboard "Menu" button
+    if (MousePos.X = -1)
+       and (MousePos.Y = -1)
+    then pt := Point(vi.Rect.Left + ItemPadding + FIconSize div 2, vi.Rect.CenterPoint.Y)
+    else pt := MousePos;
+
     if (vi.Style = vtItem)
     then begin
       FJumpItemIndex := MakeLong(vi.Item, vi.Group);
-      MapWindowPoints(Handle, HWND_DESKTOP, MousePos, 1);
-      JumpListPopupMenuPopup(MousePos.X, MousePos.Y);
+      MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
+      JumpListPopupMenuPopup(pt.X, pt.Y);
       Exit;
     end;
 
     if (vi.Style = vtFooter)
     then begin
-      MapWindowPoints(Handle, HWND_DESKTOP, MousePos, 1);
+      MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
       shift := (GetKeyState(VK_SHIFT) < 0);
       // TODO: may will be need AlphaBlendAndClose and process messages after invokecommand
       FPopupMenuVisible := True;
-      ExplorerMenuPopup(FWnd, FAppExe, MousePos, shift, 0);
+      ExplorerMenuPopup(FWnd, FAppExe, pt, shift, 0);
       FPopupMenuVisible := False;
       Exit;
     end;
@@ -776,8 +802,87 @@ end;
 procedure TFormJumpList.OnFormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if (Key = VK_ESCAPE)
-  then Close;
+  KeyboardControl(Key);
+end;
+
+procedure TFormJumpList.KeyboardControl(const AKeyCode: Word);
+var i: Integer;
+begin
+  if (FVtList.Count = 0)
+  then Exit;
+
+  FHotSelectedByMouse := False;
+
+  case AKeyCode of
+    VK_ESCAPE: // Close Jumplist
+      begin
+        Close;
+      end;
+    VK_SPACE, VK_RETURN: // Run
+      begin
+        Click;
+      end;
+    VK_UP:  // Select prev non-header item
+      begin
+        i := Index;
+        Dec(i);
+        if (i < 1)
+        then i := FVtList.Count-1;
+        if (not FVtList[i].IsSelectable)
+        then Dec(i);
+        HotIndex := i;
+      end;
+    VK_DOWN: // Select next non-header item
+      begin
+        i := Index;
+        Inc(i);
+        if (i >= FVtList.Count)
+        then i := 1;
+        if (not FVtList[i].IsSelectable)
+        then Inc(i);
+        HotIndex := i;
+      end;
+    VK_LEFT: // Unselect Pin
+      begin
+        i := Index;
+        if (i <> INDEX_NONE)
+        then HotIndex := i;
+      end;
+    VK_RIGHT: // Select Pin for pinnable item
+      begin
+        i := Index;
+        if (i <> INDEX_NONE)
+           and FVtList[i].Pinnable
+        then HotIndex := i or INDEX_PIN;
+      end;
+    VK_TAB: // Select first item for next group or footer item
+      begin
+        i := Index;
+        if (i < 1)
+           or (i = FVtList.Count-1)
+        then
+          i := 1
+        else
+          while (i < FVtList.Count) do
+          begin
+            Inc(i);
+            if (FVtList[i].Style = vtFooter)
+               or (FVtList[i-1].IsHeader)
+            then Break;
+          end;
+        HotIndex := i;
+      end;
+  end;
+end;
+
+procedure TFormJumpList.CMDialogKey(var AMsg: TCMDialogKey);
+begin
+  if (AMsg.CharCode = VK_TAB)
+  then begin
+    KeyboardControl(VK_TAB);
+    AMsg.Result := 1;
+  end
+  else inherited;
 end;
 
 procedure TFormJumpList.OnFormMouseLeave(Sender: TObject);
@@ -801,9 +906,6 @@ begin
   Result := res;
 end;
 
-var TempX: Integer = -1;
-    TempY: Integer = -1;
-
 procedure TFormJumpList.OnFormMouseMove(Sender: TObject; Shift: TShiftState; X,
   Y: Integer);
 var idx: Integer;
@@ -824,6 +926,8 @@ begin
     end
     else idx := INDEX_NONE;
   end;
+
+  FHotSelectedByMouse := True;
 
   HotIndex := idx;
 end;
@@ -1282,11 +1386,20 @@ begin
       else TipToolInfo.lpszText := PChar(TipPinText);
     end;
 
-    pt := MakePoint(GetMessagePos);
-    if (WindowFromPoint(pt) <> Handle)
-    then Exit;
-
-    pt.Offset(TipPosOffset);
+    if FHotSelectedByMouse
+    then begin
+      pt := MakePoint(GetMessagePos);
+      if (WindowFromPoint(pt) <> Handle)
+      then Exit;
+      pt.Offset(TipPosOffset)
+    end
+    else begin
+      if (vi.Pinnable)
+         and PinSelected
+      then pt := Point(vi.Rect.Right - PinButtonWidth, vi.Rect.Bottom)
+      else pt := Point(vi.Rect.Left + ItemPadding + FIconSize, vi.Rect.Bottom);
+      MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
+    end;
 
 		SendMessage(TipHwnd, TTM_UPDATETIPTEXT, 0, LParam(@TipToolInfo));
 		SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, MakeLParam(pt.X, pt.Y));
@@ -1574,7 +1687,7 @@ begin
 
   // Open
   mi := FPopupMenu.CreateMenuItem;
-  mi.Caption := MUILoadResString(shell32, LB_RS_JL_OPEN);
+  mi.Caption := L10NFind('Jumplist.Open', '&Open');
   mi.Default := True;
   mi.OnClick := OnJumpListExecute;
   FPopupMenu.Items.Add(mi);
@@ -1589,7 +1702,7 @@ begin
       begin
         // Unpin
         mi := FPopupMenu.CreateMenuItem;
-        mi.Caption := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_UNPIN);
+        mi.Caption := L10NFind('JumpList.Unpin', '&Unpin from this list');
         mi.OnClick := OnJumpListUnPin;
         FPopupMenu.Items.Add(mi);
       end;
@@ -1597,12 +1710,12 @@ begin
       begin
         // Pin
         mi := FPopupMenu.CreateMenuItem;
-        mi.Caption := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_PIN);
+        mi.Caption := L10NFind('JumpList.Pin', 'P&in to this list');
         mi.OnClick := OnJumpListPin;
         FPopupMenu.Items.Add(mi);
         // Remove
         mi := FPopupMenu.CreateMenuItem;
-        mi.Caption := MUILoadResString(LB_FN_JUMPLIST, LB_RS_JL_REMOVE);
+        mi.Caption := L10NFind('JumpList.Remove', 'Remove &from this list');
         mi.OnClick := OnJumpListRemove;
         FPopupMenu.Items.Add(mi);
       end;

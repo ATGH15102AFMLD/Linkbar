@@ -14,7 +14,7 @@ uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms,
   System.UITypes, IniFiles, Menus, Vcl.ExtCtrls, Winapi.ShlObj,
   DDForms, Cromis.DirectoryWatch,
-  AccessBar, LBToolbar, Linkbar.Consts, Linkbar.Hint, Linkbar.Taskbar;
+  AccessBar, LBToolbar, Linkbar.Consts, Linkbar.Hint, Linkbar.Taskbar, HotKey;
 
 type
 
@@ -32,7 +32,7 @@ type
     imOpenWorkdir: TMenuItem;
     imLockBar: TMenuItem;
     N3: TMenuItem;
-    imSortAlphabetically: TMenuItem;
+    imSortAlphabet: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton;
@@ -53,7 +53,8 @@ type
     procedure imLockBarClick(Sender: TObject);
     procedure FormContextPopup(Sender: TObject; MousePos: TPoint;
       var Handled: Boolean);
-    procedure imSortAlphabeticallyClick(Sender: TObject);
+    procedure imSortAlphabetClick(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
     CBmpSelectedItem: TBitmap;
     CBmpDropPosition: TBitmap;
@@ -78,13 +79,17 @@ type
     FButtonCenter: TPoint;
     FGripSize: Integer;
     FHintShow: Boolean;
+    FHotkeyInfo: THotkeyInfo;
+    FHotkeyPressed: Boolean;
     FItemMargin: TSize;
     FIconSize: Integer;
     FIsLightStyle: Boolean;
     FItemOrder: TItemOrder;
+    FJumplistShowMode: TJumplistShowMode;
     FLockLinkbar: Boolean;
     FLockHotIndex: Boolean;
     FSortAlphabetically: Boolean;
+    FStayOnTop: Boolean;
     FBkgColor: Cardinal;
     FTxtColor: Cardinal;
     FUseBkgColor: Boolean;
@@ -97,12 +102,15 @@ type
     FTextHeight: Integer;
     FIconOffset: TPoint;
     FTextRect: TRect;
+    IconsInLine, IconLinesCount: integer;
+    FPrevForegroundWnd: HWND;
     procedure UpdateWindowSize;
     procedure SetScreenAlign(AValue: TScreenAlign);
     procedure SetAutoHide(AValue: Boolean);
     procedure SetItemOrder(AValue: TItemOrder);
     procedure SetPressedIndex(AValue: integer);
     procedure SetHotIndex(AValue: integer);
+    procedure SetHotkeyInfo(AValue: THotkeyInfo);
     procedure SetButtonSize(AValue: TSize);
     procedure SetIconSize(AValue: integer);
     procedure SetIsLightStyle(AValue: Boolean);
@@ -111,6 +119,7 @@ type
     procedure SetTextOffset(AValue: Integer);
     procedure SetTextWidth(AValue: Integer);
     procedure SetSortAlphabetically(AValue: Boolean);
+    procedure SetStayOnTop(AValue: Boolean);
     function GetScreenAlign: TScreenAlign;
     procedure DrawBackground(const ABitmap: TBitmap; const AClipRect: TRect);
     procedure DrawCaption(const ABitmap: TBitmap; const AIndex: Integer;
@@ -128,6 +137,7 @@ type
     function CheckItem(AIndex: Integer): Boolean;
     function ScaleDimension(const X: Integer): Integer; inline;
   private
+    procedure L10n;
     procedure LoadProperties(const AFileName: string);
     procedure SaveProperties;
   private
@@ -152,6 +162,7 @@ type
       var AWidth, AHeight: Integer);
     procedure QuerySizedEvent(Sender: TObject; const AX, AY, AWidth, AHeight: Integer);
     procedure QueryHideEvent(Sender: TObject; AEnabled: boolean);
+    function IsItemIndex(const AIndex: Integer): Boolean;
   private
     FRemoved: boolean;
     procedure DoPopupMenuItemExecute(const ACmd: Integer);
@@ -175,6 +186,8 @@ type
     procedure CreateParams(var Params: TCreateParams); override;
     procedure CreateWnd; override;
     procedure WndProc(var Msg: TMessage); override;
+    procedure WmHotKey(var Msg: TMessage); message WM_HOTKEY;
+    procedure CMDialogKey(var Msg: TCMDialogKey); message CM_DIALOGKEY;
   protected
     FAutoHiden: Boolean;
     FCanAutoHide: Boolean;
@@ -183,8 +196,8 @@ type
     FAfterAutoHideBound: TRect;
     FAutoShowDelay: Integer;
     procedure DoAutoHide;
-    procedure _DoAutoShow;
-    procedure _DoDelayedAutoShow;
+    procedure DoAutoShow;
+    procedure DoDelayedAutoShow;
     procedure OnFormJumplistDestroy(Sender: TObject);
   public
     procedure UpdateItemSizes;
@@ -193,10 +206,12 @@ type
     property AutoHideTransparency: Boolean read FAutoHideTransparency write FAutoHideTransparency;
     property AutoShowMode: TAutoShowMode read FAutoShowMode write FAutoShowMode;
     property ButtonSize: TSize read FButtonSize write SetButtonSize;
+    property HotkeyInfo: THotkeyInfo read FHotkeyInfo write SetHotkeyInfo;
     property ItemMargin: TSize read FItemMargin write SetItemMargin;
     property IconSize: Integer read FIconSize write SetIconSize;
     property IsLightStyle: Boolean read FIsLightStyle write SetIsLightStyle;
     property ItemOrder: TItemOrder read FItemOrder write SetItemOrder;
+    property JumplistShowMode: TJumplistShowMode read FJumplistShowMode write FJumplistShowMode;
     property TextLayout: TTextLayout read FTextLayout write SetTextLayout;
     property TextOffset: Integer read FTextOffset write SetTextOffset;
     property TextWidth: Integer read FTextWidth write SetTextWidth;
@@ -211,6 +226,7 @@ type
     property UseBkgColor: Boolean read FUseBkgColor write FUseBkgColor;
     property UseTxtColor: Boolean read FUseTxtColor write FUseTxtColor;
     property GlowSize: Integer read FGlowSize write FGlowSize;
+    property StayOnTop: Boolean read FStayOnTop write SetStayOnTop;
   private
     FEnableAeroGlass: Boolean;
     procedure SetEnableAeroGlass(AValue: Boolean);
@@ -222,8 +238,6 @@ type
 
 var
   LinkbarWcl: TLinkbarWcl;
-  IconsInLine,
-  IconLinesCount: integer;
   FPreferencesFileName: string;
 
 implementation
@@ -233,7 +247,7 @@ implementation
 uses Types, Math, Dialogs, StrUtils,
   ExplorerMenu, Linkbar.Settings, Linkbar.Shell, Linkbar.Themes,
   Linkbar.OS, JumpLists.Api, JumpLists.Form,
-  Linkbar.ResStr, Linkbar.Loc, RenameDialog,
+  Linkbar.L10n, RenameDialog,
   Themes;
 
 const
@@ -242,6 +256,7 @@ const
 
   WM_LB_SHELLNOTIFY = WM_USER + 88;
   TIMER_AUTO_SHOW = 15;
+  TIMER_AUTO_HIDE = 16;
 
 function IsValidPreferenceFile(const AFileName: string): Boolean;
 var ini: TMemIniFile;
@@ -355,7 +370,9 @@ begin
   Result := FileExists(fn);
   if not Result
   then begin
-    if MessageDlg( RS_FILENOTFOUND + #13 + fn + #13 + RS_Q_DELETELINK,
+    if MessageDlg( L10NFind('Message.FileNotFound', 'File does not exists')
+        + #13 + fn + #13 +
+        L10NFind('Message.DeleteShortcut', 'Delete shortcut?'),
         mtConfirmation, [mbOK, mbCancel], 0, mbCancel) = mrOk
     then begin
       Items.Delete(AIndex);
@@ -704,6 +721,7 @@ begin
         DEF_AUTOHIDE_TRANSPARENCY);
       FAutoShowMode := TAutoShowMode(IniFile.ReadInteger(INI_SECTION_MAIN, INI_AUTOHIDE_SHOWMODE,
         DEF_AUTOHIDE_SHOWMODE));
+      FHotkeyInfo.Create( IniFile.ReadString(INI_SECTION_MAIN, INI_AUTOHIDE_HOTKEY, DEF_AUTOHIDE_HOTKEY) );
       FIconSize := IniFile.ReadInteger(INI_SECTION_MAIN, INI_ICON_SIZE, DEF_ICON_SIZE);
       FItemMargin.cx := IniFile.ReadInteger(INI_SECTION_MAIN, INI_MARGINX, DEF_MARGINX);
       FItemMargin.cy := IniFile.ReadInteger(INI_SECTION_MAIN, INI_MARGINY, DEF_MARGINY);
@@ -729,6 +747,8 @@ begin
       FGlowSize := IniFile.ReadInteger(INI_SECTION_MAIN, INI_GLOWSIZE, DEF_GLOWSIZE);
 
       FHintShow := IniFile.ReadBool(INI_SECTION_DEV, INI_HINT_SHOW, DEF_HINT_SHOW);
+      StayOnTop := IniFile.ReadBool(INI_SECTION_MAIN, INI_STAYONTOP, DEF_STAYONTOP);
+      FJumplistShowMode := TJumplistShowMode(IniFile.ReadInteger(INI_SECTION_MAIN, INI_JUMPLISTSHOWMODE, DEF_JUMPLISTSHOWMODE));
     finally
       IniFile.Free;
     end;
@@ -739,6 +759,7 @@ begin
     FAutoHide := DEF_AUTOHIDE;
     FAutoHideTransparency := DEF_AUTOHIDE_TRANSPARENCY;
     FAutoShowMode := TAutoShowMode(DEF_AUTOHIDE_SHOWMODE);
+    FHotkeyInfo.Create(DEF_AUTOHIDE_HOTKEY);
     FIconSize  := DEF_ICON_SIZE;
     FItemMargin := TSize.Create(DEF_MARGINX, DEF_MARGINY);
 
@@ -758,6 +779,8 @@ begin
 
     FAutoShowDelay := DEF_AUTOSHOW_DELAY;
     FSortAlphabetically := DEF_SORT_AB;
+    StayOnTop := DEF_STAYONTOP;
+    FJumplistShowMode := TJumplistShowMode(DEF_JUMPLISTSHOWMODE);
   end;
 
   { Check values }
@@ -770,7 +793,10 @@ begin
   // Screen edge
   if ( FScreenEdge < Low(TScreenAlign) ) or ( FScreenEdge > High(TScreenAlign) )
   then FScreenEdge := TScreenAlign(DEF_EDGE);
-
+  // Jumplists
+  if ( FJumplistShowMode < Low(TJumplistShowMode) ) or ( FJumplistShowMode > High(TJumplistShowMode) )
+  then FJumplistShowMode := TJumplistShowMode(DEF_JUMPLISTSHOWMODE);
+  
   FIconSize := EnsureRange(FIconSize, ICON_SIZE_MIN, ICON_SIZE_MAX);
   FItemMargin.cx := EnsureRange(FItemMargin.cx, MARGIN_MIN, MARGIN_MAX);
   FItemMargin.cy := EnsureRange(FItemMargin.cy, MARGIN_MIN, MARGIN_MAX);
@@ -801,6 +827,10 @@ begin
   FDragingItem := False;
 
   ExpAeroGlassEnabled := FEnableAeroGlass;
+
+  // Register Hotkey
+  if (AutoHide)
+  then RegisterHotkeyNotify(Handle, FHotkeyInfo);
 end;
 
 procedure TLinkbarWcl.SaveProperties;
@@ -840,6 +870,7 @@ begin
         IniFile.WriteBool(INI_SECTION_MAIN, INI_AUTOHIDE, AutoHide);
         IniFile.WriteBool(INI_SECTION_MAIN, INI_AUTOHIDE_TRANSPARENCY, FAutoHideTransparency);
         IniFile.WriteInteger(INI_SECTION_MAIN, INI_AUTOHIDE_SHOWMODE, Integer(AutoShowMode));
+        IniFile.WriteString(INI_SECTION_MAIN, INI_AUTOHIDE_HOTKEY, HotkeyInfo);
 
         IniFile.WriteInteger(INI_SECTION_MAIN, INI_ICON_SIZE, IconSize);
         IniFile.WriteInteger(INI_SECTION_MAIN, INI_MARGINX, ItemMargin.cx);
@@ -868,6 +899,10 @@ begin
 
         IniFile.WriteInteger(INI_SECTION_MAIN, INI_GLOWSIZE, FGlowSize);
 
+        IniFile.WriteBool(INI_SECTION_MAIN, INI_STAYONTOP, FStayOnTop);
+        // Jumplists
+        IniFile.WriteInteger(INI_SECTION_MAIN, INI_JUMPLISTSHOWMODE, Integer(JumplistShowMode));
+
         IniFile.UpdateFile;
       finally
         IniFile.Free;
@@ -894,7 +929,8 @@ end;
 
 procedure TLinkbarWcl.FormCreate(Sender: TObject);
 begin
-  LbTranslateComponent(Self);
+  L10n;
+  oHint := TTooltip32.Create(Handle);
 
   pMenu.Items.RethinkHotkeys;
 
@@ -912,11 +948,10 @@ begin
 
   GetOrCreateFilesList(WorkDir + LINKSLIST_FILE_NAME);
 
-  oHint := TTooltip32.Create(Handle);
-
   UpdateItemSizes;
 
   oAppBar := TAccessBar.Create2(self, FScreenEdge, FALSE);
+  oAppBar.StayOnTop := StayOnTop;
   oAppBar.MonitorNum := FMonitorNum;
   oAppBar.QuerySizing := QuerySizingEvent;
   oAppBar.QuerySized := QuerySizedEvent;
@@ -928,19 +963,171 @@ begin
   BitBucketNotify := RegisterBitBucketNotify(Handle, WM_LB_SHELLNOTIFY);
 end;
 
+procedure TLinkbarWcl.L10n;
+begin
+  L10nControl(imNewShortcut,  'Menu.Shortcut');
+  L10nControl(imOpenWorkdir,  'Menu.Open');
+  L10nControl(imAddBar,       'Menu.Create');
+  L10nControl(imRemoveBar,    'Menu.Delete');
+  L10nControl(imLockBar,      'Menu.Lock');
+  L10nControl(imSortAlphabet, 'Menu.Sort');
+  L10nControl(imProperties,   'Menu.Properties');
+  L10nControl(imClose,        'Menu.Close');
+  L10nControl(imCloseAll,     'Menu.CloseAll');
+end;
+
 procedure TLinkbarWcl.FormDestroy(Sender: TObject);
 begin
-  StopDirWatch;
   DeregisterBitBucketNotify(BitBucketNotify);
-  if not FRemoved
+  UnregisterHotkeyNotify(Handle);
+
+  if Assigned(FrmProperties)
+  then FrmProperties.Free;
+
+  oAppBar.Free;
+  StopDirWatch;
+
+  if (not FRemoved)
   then SaveProperties;
+
   ThemeCloseData;
+
   if Assigned(oHint) then oHint.Free;
   if Assigned(BmpMain) then BmpMain.Free;
   if Assigned(BmpBtn) then BmpBtn.Free;
   if Assigned(CBmpSelectedItem) then CBmpSelectedItem.Free;
   if Assigned(CBmpDropPosition) then CBmpDropPosition.Free;
   if Assigned(Items) then Items.Free;
+end;
+
+function TLinkbarWcl.IsItemIndex(const AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (AIndex < Items.Count);
+end;
+
+procedure TLinkbarWcl.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+{$IFNDEF DEBUG}
+  //if (Shift <> []) then Exit;
+{$ENDIF}
+
+  if (Items.Count = 0) then Exit;
+
+  case Key of
+    VK_SPACE, VK_RETURN: // Run
+      begin
+        if IsItemIndex(HotIndex)
+        then begin
+          oHint.Cancel;
+          DoExecuteItem(HotIndex);
+        end;
+        Exit;
+      end;
+    VK_ESCAPE: // Deselect
+      begin
+        HotIndex := ITEM_NONE;
+        Exit;
+      end;
+    VK_F2: // Rename
+      begin
+        if IsItemIndex(HotIndex)
+        then begin
+          oHint.Cancel;
+          DoRenameItem(HotIndex);
+        end;
+        Exit;
+      end;
+    VK_DELETE:
+      begin
+        if IsItemIndex(HotIndex)
+        then begin
+          oHint.Cancel;
+          SHDeleteOp(Handle, Items[HotIndex].FileName, GetKeyState(VK_SHIFT) >= 0);
+        end;
+        Exit;
+      end;
+    // Arrows
+    VK_LEFT, VK_RIGHT, VK_DOWN, VK_UP:
+      begin
+        // No hot item:
+        // Left/Up - last
+        // Right/Down - first
+        if (HotIndex = ITEM_NONE)
+        then begin
+          if (Key in [VK_LEFT, VK_UP])
+          then HotIndex := Items.Count-1
+          else HotIndex := 0;
+          Exit;
+        end;
+
+        // One-line panel:
+        // Left/Up - prev
+        // Right/Down - next
+        if (IconLinesCount = 1)
+        then begin
+          if (Key in [VK_LEFT, VK_UP])
+          then HotIndex := Max(HotIndex - 1, 0)
+          else HotIndex := Min(HotIndex + 1, Items.Count-1);
+          Exit;
+        end;
+
+        // Multi-line panel:
+        case Key of
+          VK_LEFT:
+            begin
+              if (ItemOrder = ioLeftToRight)
+              then HotIndex := Max(HotIndex - 1, 0)
+              else begin
+                if (oAppBar.Vertical)
+                then HotIndex := Max(HotIndex - IconsInLine,    0)
+                else HotIndex := Max(HotIndex - IconLinesCount, 0);
+              end;
+            end;
+          VK_RIGHT:
+            begin
+              if (ItemOrder = ioLeftToRight)
+              then HotIndex := Min(HotIndex + 1, Items.Count-1)
+              else begin
+                if (oAppBar.Vertical)
+                then HotIndex := Min(HotIndex + IconsInLine,    Items.Count-1)
+                else HotIndex := Min(HotIndex + IconLinesCount, Items.Count-1)
+              end;
+            end;
+          VK_UP:
+            begin
+              if (ItemOrder = ioUpToDown)
+              then HotIndex := Max(HotIndex - 1, 0)
+              else begin
+                if (oAppBar.Vertical)
+                then HotIndex := Max(HotIndex - IconLinesCount, 0)
+                else HotIndex := Max(HotIndex - IconsInLine,    0)
+              end;
+            end;
+          VK_DOWN:
+            begin
+              if (ItemOrder = ioUpToDown)
+              then HotIndex := Min(HotIndex + 1, Items.Count-1)
+              else begin
+                if (oAppBar.Vertical)
+                then HotIndex := Min(HotIndex + IconLinesCount, Items.Count-1)
+                else HotIndex := Min(HotIndex + IconsInLine,    Items.Count-1)
+              end;
+            end;
+        end;
+      end;
+  else
+    Exit;
+  end;
+end;
+
+procedure TLinkbarWcl.CMDialogKey(var Msg: TCMDialogKey);
+begin
+  if (Msg.CharCode = VK_TAB)
+  then begin
+    HotIndex := HotIndex + 1;
+    Exit;
+  end;
+  inherited;
 end;
 
 function TLinkbarWcl.ItemIndexByPoint(const APt: TPoint;
@@ -983,9 +1170,16 @@ begin
   end;
 end;
 
-procedure TLinkbarWcl.FormMouseMove(Sender: TObject; Shift: TShiftState; X,
-  Y: Integer);
+var
+  prevX: Integer = -MaxInt;
+  prevY: Integer = -MaxInt;
+
+procedure TLinkbarWcl.FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
 begin
+  if (X = prevX) and (Y = prevY)
+  then Exit;
+  prevX := X; prevY := Y;
+
   if FAutoHiden then Exit;
 
   if Self.IsDragDrop then Exit;
@@ -1044,8 +1238,9 @@ begin
        or
        ( (AutoShowMode = smMouseClickRight) and (Button = mbRight) )
     then begin
+
       if PtInRect(Rect(0,0,Width,Height), Point(X, Y))
-      then _DoAutoShow;
+      then DoAutoShow;
     end;
     Exit;
   end;
@@ -1094,7 +1289,7 @@ end;
 
 procedure TLinkbarWcl.DoExecuteItem(const AIndex: Integer);
 begin
-  if AIndex <> ITEM_NONE
+  if (AIndex <> ITEM_NONE)
   then begin
     if CheckItem(AIndex)
     then OpenByDefaultVerb(Handle, Items[AIndex].Pidl);
@@ -1237,7 +1432,7 @@ begin
        and (FLockLinkbar)
     then Flags := Flags or MF_CHECKED;
 
-    if (pMenu.Items[i] = imSortAlphabetically)
+    if (pMenu.Items[i] = imSortAlphabet)
        and (FSortAlphabetically)
     then Flags := Flags or MF_CHECKED;
 
@@ -1320,31 +1515,34 @@ var item: TLbItem;
     fjl: TFormJumpList;
     maxcount: Integer;
 begin
-  item := Items[FItemPopup];
-
-  { Check and show Jumplist }
-  maxcount := GetJumpListMaxCount;
-  if (maxcount > 0)
-     and GetAppInfoForLink(item.Pidl, appid)
-     and HasJumpList(appid)
+  if (FJumplistShowMode <> jsmDisabled)
   then begin
-    oHint.Cancel;
-    r := item.Rect;
-    case ScreenAlign of
-      saLeft:   pt := Point(r.Right, r.Bottom);
-      saRight:  pt := Point(r.Left, r.Bottom);
-      saTop:    pt := Point(r.CenterPoint.X, r.Bottom);
-      saBottom: pt := Point(r.CenterPoint.X, r.Top);
-    end;
-    MapWindowPoints(Handle, 0, pt, 1);
-    fjl := TFormJumpList.CreateNew(Self);
-    fjl.OnDestroy := OnFormJumplistDestroy;
-    if fjl.Popup(Handle, pt.X, pt.Y, JUMPLIST_ALIGN[ScreenAlign], appid,
-      item.Pidl, maxcount)
+    item := Items[FItemPopup];
+
+    { Check and show Jumplist }
+    maxcount := GetJumpListMaxCount;
+    if (maxcount > 0)
+       and GetAppInfoForLink(item.Pidl, appid)
+       and HasJumpList(appid)
     then begin
-      FLockHotIndex := True;
-      FLockAutoHide := True;
-      Exit;
+      oHint.Cancel;
+      r := item.Rect;
+      case ScreenAlign of
+        saLeft:   pt := Point(r.Right, r.Bottom);
+        saRight:  pt := Point(r.Left, r.Bottom);
+        saTop:    pt := Point(r.CenterPoint.X, r.Bottom);
+        saBottom: pt := Point(r.CenterPoint.X, r.Top);
+      end;
+      MapWindowPoints(Handle, 0, pt, 1);
+      fjl := TFormJumpList.CreateNew(Self);
+      fjl.OnDestroy := OnFormJumplistDestroy;
+      if fjl.Popup(Handle, pt.X, pt.Y, JUMPLIST_ALIGN[ScreenAlign], appid,
+        item.Pidl, maxcount)
+      then begin
+        FLockHotIndex := True;
+        FLockAutoHide := True;
+        Exit;
+      end;
     end;
   end;
 
@@ -1365,8 +1563,10 @@ begin
   if (pt.X = -1) and (pt.Y = -1)
   then begin
     // Pressed keyboard key "Menu"
-    pt := Point(0, 0);
-    FItemPopup := ITEM_NONE;
+    FItemPopup := HotIndex;
+    if IsItemIndex(FItemPopup)
+    then pt := Items[HotIndex].Rect.CenterPoint
+    else pt := Point(0, 0);
   end
   else
     FItemPopup := ItemIndexByPoint(pt);
@@ -1512,6 +1712,9 @@ var
   HA: TAlignment;
   VA: TVerticalAlignment;
 begin
+  if not IsItemIndex(AValue)
+  then AValue := ITEM_NONE;
+
   if (FLockHotIndex)
      or (AValue = FHotIndex)
   then Exit;
@@ -1579,6 +1782,15 @@ begin
   end;
 end;
 
+procedure TLinkbarWcl.SetHotkeyInfo(AValue: THotkeyInfo);
+begin
+  FHotkeyInfo := AValue;
+  if (AutoHide)
+     // (AutoShowMode = smHotKey)
+  then RegisterHotkeyNotify(Handle, FHotkeyInfo)
+  else UnregisterHotkeyNotify(Handle);
+end;
+
 procedure TLinkbarWcl.SetScreenAlign(AValue: TScreenAlign);
 begin
   FScreenEdge := AValue;
@@ -1595,6 +1807,17 @@ begin
     Items.Sort;
     oAppBar.AppBarPosChanged;
   end;
+end;
+
+procedure TLinkbarWcl.SetStayOnTop(AValue: Boolean);
+const FORM_STYLE: array[Boolean] of TFormStyle = (fsNormal, fsStayOnTop);
+begin
+  if FStayOnTop = AValue then Exit;
+  FStayOnTop := AValue;
+  Self.FormStyle := FORM_STYLE[FStayOnTop];
+
+  if Assigned(oAppBar)
+  then oAppBar.StayOnTop := FStayOnTop;
 end;
 
 procedure TLinkbarWcl.QuerySizingEvent(Sender: TObject; AVertical: Boolean;
@@ -1686,10 +1909,6 @@ procedure TLinkbarWcl.WndProc(var Msg: TMessage);
 var i: Integer;
 begin
   case Msg.Msg of
-    CUSTOM_ABN_FULLSCREENAPP:
-      begin
-        oAppBar.AppBarFullScreenApp(Msg.LParam <> 0);
-      end;
     // DWM Messaages
     WM_THEMECHANGED:
       begin
@@ -1733,6 +1952,8 @@ begin
     WM_KILLFOCUS:
       begin
         Msg.Result := 0;
+        if (csDestroying in ComponentState)
+        then Exit;
         FCanAutoHide := not Assigned(FrmProperties);
         DoAutoHide;
       end;
@@ -1776,16 +1997,83 @@ begin
     { Delayed auto show (timer) }
     WM_TIMER:
     begin
-      if (Msg.WParam = TIMER_AUTO_SHOW)
-      then begin
-        KillTimer(Handle, TIMER_AUTO_SHOW);
-        _DoAutoShow;
-        Exit;
+      case Msg.WParam of
+        TIMER_AUTO_SHOW:
+          begin
+            KillTimer(Handle, TIMER_AUTO_SHOW);
+            DoAutoShow;
+            Exit;
+          end;
+        TIMER_AUTO_HIDE:
+          begin
+            KillTimer(Handle, TIMER_AUTO_HIDE);
+            DoAutoHide;
+            Exit;
+          end;
       end;
     end
   else
     inherited WndProc(Msg);
   end;
+end;
+
+function SetForegroundWindowInternal(AWnd: HWND): HWND;
+var ip: TInput; // This structure will be used to create the keyboard input event.
+begin
+  Result := 0;
+
+  if not IsWindow(AWnd)
+  then Exit;
+
+  Result := GetForegroundWindow;
+
+  // Set up a generic keyboard event.
+  FillChar(ip, SizeOf(ip), 0);
+  ip.Itype := INPUT_KEYBOARD;
+  ip.ki.wScan := 0; // hardware scan code for key
+  ip.ki.time := 0;
+	ip.ki.dwExtraInfo := 0;
+
+  // Press the "Alt" key
+	ip.ki.wVk := VK_MENU; // virtual-key code for the "Alt" key
+	ip.ki.dwFlags := 0; // 0 for key press
+	SendInput(1, ip, SizeOf(ip));
+
+  //Sleep(100); //Sometimes SetForegroundWindow will fail and the window will flash instead of it being show. Sleeping for a bit seems to help.
+  Application.ProcessMessages;
+
+	SetForegroundWindow(AWnd);
+
+ 	// Release the "Alt" key
+	ip.ki.dwFlags := KEYEVENTF_KEYUP; // for key release
+	SendInput(1, ip, sizeof(ip));
+end;
+
+procedure TLinkbarWcl.WmHotKey(var Msg: TMessage);
+begin
+  if (Msg.Msg = WM_HOTKEY)
+     and (Msg.WParam = LB_HOTKEY_ID)
+     and (Msg.LParamHi = FHotkeyInfo.KeyCode)
+     and (Msg.LParamLo = FHotkeyInfo.Modifiers)
+     and AutoHide
+     //and (FAutoShowMode = smHotkey)
+  then begin
+    FHotkeyPressed := True;
+    if (FAutoHiden)
+    then begin
+      DoAutoShow;
+      FPrevForegroundWnd := SetForegroundWindowInternal(Handle);
+    end
+    else begin
+      SetForegroundWindowInternal(FPrevForegroundWnd);
+      // Linkbar will be hidden when it loses Focus
+      //DoAutoHide;
+    end;
+    FHotkeyPressed := False;
+    Exit;
+  end;
+
+  inherited;
 end;
 
 procedure TLinkbarWcl.UpdateBitBuckets;
@@ -1860,9 +2148,12 @@ begin
 end;
 
 procedure TLinkbarWcl.imAddBarClick(Sender: TObject);
+var cmd: string;
 begin
-  LBCreateProcess( ParamStr(0), LBCreateCommandParam(CLK_NEW, '')
-    + LBCreateCommandParam(CLK_LANG, IntToStr(LbLangID)) );
+  cmd := LBCreateCommandParam(CLK_NEW, '');
+  if (Locale <> '')
+  then cmd := cmd + LBCreateCommandParam(CLK_LANG, Locale);
+  LBCreateProcess(ParamStr(0), cmd);
 end;
 
 procedure TLinkbarWcl.imNewShortcutClick(Sender: TObject);
@@ -1883,9 +2174,9 @@ begin
   try
     td.Caption := ' ' + APP_NAME_LINKBAR;
     td.MainIcon := tdiNone;
-    td.Title := Format(RS_REMDLG_TITLE, [PanelName]);
-    td.Text := Format(RS_REMDLG_TEXT, [WorkDir]);
-    td.VerificationText := RS_REMDLG_VERIFICATIONTEXT + Format('%*s', [24, ' ']);
+    td.Title := Format( L10NFind('Delete.Title', 'You remove the linkbar "%s"'), [PanelName] );
+    td.Text := Format( L10NFind('Delete.Text', 'Working directory: %s'), [WorkDir] );
+    td.VerificationText := L10NFind('Delete.Verification', 'Delete working directory') + Format('%*s', [24, ' ']);
     td.CommonButtons := [tcbOk, tcbCancel];
     td.DefaultButton := tcbCancel;
 
@@ -1907,7 +2198,7 @@ begin
   end;
 end;
 
-procedure TLinkbarWcl.imSortAlphabeticallyClick(Sender: TObject);
+procedure TLinkbarWcl.imSortAlphabetClick(Sender: TObject);
 begin
   SortAlphabetically := not SortAlphabetically;
 end;
@@ -1921,9 +2212,15 @@ begin
   Result := MulDiv(X, Self.PixelsPerInch, 96);
 end;
 
-function MakePoint(const Param : DWord): TPoint; inline;
+// Macros from windowsx.h:
+// Important  Do not use the LOWORD or HIWORD macros to extract the x- and y-
+// coordinates of the cursor position because these macros return incorrect results
+// on systems with multiple monitors. Systems with multiple monitors can have
+// negative x- and y- coordinates, and LOWORD and HIWORD treat the coordinates
+// as unsigned quantities.
+function MakePoint(const L: DWORD): TPoint; inline;
 Begin
-  Result := TPoint.Create(Param and $FFFF, Param shr 16);
+  Result := TPoint.Create(SmallInt(L and $FFFF), SmallInt(L shr 16));
 End;
 
 procedure TLinkbarWcl.DoAutoHide;
@@ -1936,7 +2233,6 @@ begin
 
   if FCanAutoHide and not FAutoHiden
   then begin
-
     FAutoHiden := True;
     r := FBeforeAutoHideBound;
     case ScreenAlign of
@@ -1952,15 +2248,14 @@ begin
   end;
 end;
 
-procedure TLinkbarWcl._DoAutoShow;
+procedure TLinkbarWcl.DoAutoShow;
+var pt: TPoint;
 begin
-  if (not AutoHide)
-  then Exit;
-
-  if ( WindowFromPoint(MakePoint(GetMessagePos)) <> Handle )
-  then Exit;
-
-  if FAutoHiden
+  pt := MakePoint(GetMessagePos);
+  if (AutoHide)
+     and (FAutoHiden)
+     and (FHotkeyPressed or (WindowFromPoint(pt) = Handle))
+     //(FAutoShowMode <> smHotKey)
   then begin
     FAutoHiden := False;
     MoveWindow(Handle, FBeforeAutoHideBound.Left, FBeforeAutoHideBound.Top,
@@ -1970,13 +2265,13 @@ begin
   end;
 end;
 
-procedure TLinkbarWcl._DoDelayedAutoShow;
+procedure TLinkbarWcl.DoDelayedAutoShow;
 begin
   if (not AutoHide)
   then Exit;
 
   if (FAutoShowDelay = 0)
-  then _DoAutoShow
+  then DoAutoShow
   else SetTimer(Handle, TIMER_AUTO_SHOW, FAutoShowDelay, nil);
 end;
 
@@ -1985,14 +2280,14 @@ begin
   if AutoHide
      and FAutoHiden
      and (FAutoShowMode = smMouseHover)
-  then _DoDelayedAutoShow;
+  then DoDelayedAutoShow;
 end;
 
 procedure TLinkbarWcl.FormMouseLeave(Sender: TObject);
 begin
   HotIndex := -1;
   if (FAutoShowMode = smMouseHover) or FCanAutoHide
-  then DoAutoHide;
+  then SetTimer(Handle, TIMER_AUTO_HIDE, TIMER_AUTO_HIDE_DELAY, nil);// DoAutoHide;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2130,7 +2425,7 @@ begin
      and FAutoHiden
   then begin
     FCanAutoHide := False;
-    _DoAutoShow;
+    DoAutoShow;
   end;
 end;
 
@@ -2149,7 +2444,7 @@ begin
   if AutoHide and not Active
   then begin
     FCanAutoHide := True;
-    DoAutoHide;
+    SetTimer(Handle, TIMER_AUTO_HIDE, TIMER_AUTO_HIDE_DELAY, nil); // DoAutoHide;
   end;
 end;
 

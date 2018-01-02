@@ -14,10 +14,6 @@ uses
   Messages, SysUtils, Classes, Controls, Forms,
   ShellApi, Vcl.Dialogs, Linkbar.Consts, Linkbar.OS;
 
-const
-  APPBAR_CALLBACK =  WM_USER + 1;
-  CUSTOM_ABN_FULLSCREENAPP =  WM_USER + 2;
-
 type
   TQuerySizingEvent = procedure(Sender: TObject; AVertical: Boolean;
     var AWidth, AHeight: Integer) of object;
@@ -26,7 +22,6 @@ type
 
   THiddenForm = class (TCustomForm)
   private
-
     FAccessHandle: THandle;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
@@ -40,6 +35,9 @@ type
 
   TAccessBar = class(TComponent)
   private
+    const
+      HWND_STYLE: array[Boolean] of HWND = (HWND_NOTOPMOST, HWND_TOPMOST);
+  private
     gABRegistered: boolean;
     FOwnerOriginalWndProc: TWndMethod;
     FAutoHide: boolean;
@@ -49,8 +47,10 @@ type
     FQueryAutoHide: TQueryHideEvent;
     FHandle: HWND;
     FBoundRect: TRect;
+    FStayOnTop: Boolean;
     // special form for autohide
     ahform: THiddenForm;
+    FTaskbarCreated: UINT;
     procedure SetAutoHide(const AValue: boolean);
     procedure SetSide(const AValue: TScreenAlign);
     procedure AppBWndProc(var Msg: TMessage);
@@ -71,6 +71,7 @@ type
     procedure AppBarPosChanged;
     procedure AppBarFullScreenApp(AEnabled: Boolean);
   published
+    property StayOnTop: Boolean read FStayOnTop write FStayOnTop;
     property AutoHide: boolean read FAutoHide write SetAutoHide;
     property Side: TScreenAlign read FSide write SetSide default saTop;
     property QuerySizing: TQuerySizingEvent read FQuerySizing write FQuerySizing;
@@ -83,12 +84,48 @@ type
 
 implementation
 
-uses Types, Math, Linkbar.Loc;
+uses Types, Math, Linkbar.L10n;
 
 const
+  APPBAR_CALLBACK       =  WM_USER + 1;
+  APPBAR_FULLSCREENAPP  =  WM_USER + 2;
+  APPBAR_TASKBARSTARTED =  WM_USER + 3;
+
   // Multi Monitor support, introduced in Windows 8
   ABM_GETAUTOHIDEBAREX = $0000000b;
   ABM_SETAUTOHIDEBAREX = $0000000c;
+
+procedure ChangeWindowMessageFilterEx(const AWnd: HWND; const AMessage: UINT);
+const MSGFLT_ALLOW = 1;
+type
+  CHANGEFILTERSTRUCT = packed record
+    cbSize: DWORD;
+    ExtStatus: DWORD;
+  end;
+  TChangeFilterStruct = CHANGEFILTERSTRUCT;
+  PChangeFilterStruct = ^TChangeFilterStruct;
+
+  TChangeWindowMessageFilter   = function (hWnd: HWND; Message: UINT; Action: DWORD): BOOL; stdcall;
+  TChangeWindowMessageFilterEx = function (hWnd: HWND; Message: UINT; Action: DWORD; pChangeFilterStruct: PChangeFilterStruct): BOOL; stdcall;
+
+var proc: TChangeWindowMessageFilter;
+    procEx: TChangeWindowMessageFilterEx;
+begin
+  @procEx := GetProcAddress(GetModuleHandle(user32), 'ChangeWindowMessageFilterEx');
+  if Assigned(procEx)
+  then begin
+    if not procEx(AWnd, AMessage, MSGFLT_ALLOW, nil)
+    then MessageBox(0, PChar(SysErrorMessage(GetLastError)), nil, MB_OK);
+  end
+  else begin
+    @proc := GetProcAddress(GetModuleHandle(user32), 'ChangeWindowMessageFilter');
+    if Assigned(proc)
+    then begin
+      if not proc(AWnd, AMessage, MSGFLT_ALLOW)
+      then MessageBox(0, PChar(SysErrorMessage(GetLastError)), nil, MB_OK);
+    end;
+  end;
+end;
 
 function IsVertical(const AEdge: TScreenAlign): Boolean; inline;
 begin
@@ -123,8 +160,8 @@ begin
   rabd.hWnd := Self.Handle;
   rabd.uCallbackMessage := APPBAR_CALLBACK;
   FAccessHandle := 0;
-  if SHAppBarMessage(ABM_NEW, rabd) = 0 then
-       raise Exception.Create(SysErrorMessage(GetLastError()));
+  if SHAppBarMessage(ABM_NEW, rabd) = 0
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
 end;
 
 procedure THiddenForm.CreateParams(var Params: TCreateParams);
@@ -141,8 +178,8 @@ begin
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize := SizeOf(rabd);
   rabd.hWnd := Self.Handle;
-  if SHAppBarMessage(ABM_REMOVE, rabd) = 0 then
-    raise Exception.Create(SysErrorMessage(GetLastError()));
+  if SHAppBarMessage(ABM_REMOVE, rabd) = 0
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
   inherited Destroy;
 end;
 
@@ -158,8 +195,8 @@ begin
 
   rabd.rc.Width := 0;
   rabd.rc.Height := 0;
-  if SHAppBarMessage(ABM_SETPOS, rabd) = 0 then
-    raise Exception.Create(SysErrorMessage(GetLastError()));
+  if SHAppBarMessage(ABM_SETPOS, rabd) = 0
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
 
   MoveWindow(Handle, rabd.rc.Left, rabd.rc.Top, 0, 0, False);
 end;
@@ -169,7 +206,7 @@ begin
   if Msg.Msg = APPBAR_CALLBACK
   then begin
     if (Msg.wParam = ABN_FULLSCREENAPP) and IsWindow(FAccessHandle)
-    then SendMessage(FAccessHandle, CUSTOM_ABN_FULLSCREENAPP, 0, Msg.lParam);
+    then SendMessage(FAccessHandle, APPBAR_FULLSCREENAPP, 0, Msg.lParam);
   end
   else inherited WndProc(Msg);
 end;
@@ -183,44 +220,31 @@ procedure TAccessBar.RegisterAppBar;
 var rabd: TAppBarData;
 begin
   if gABRegistered then exit;
-  // check if we are not in the Delphi IDE
-  if not (csDesigning in ComponentState) then
-  begin
-    // make sure we get the notification messages
-    FOwnerOriginalWndProc := TWinControl(Owner).WindowProc;
-    TWinControl(Owner).WindowProc := AppBWndProc;
 
-    FillChar(rabd, SizeOf(rabd), 0);
-    rabd.cbSize:= SizeOf(rabd);
-    rabd.hWnd := FHandle;
-    rabd.uCallbackMessage:= APPBAR_CALLBACK;
-    // register the application bar within the system
-    if SHAppBarMessage(ABM_NEW, rabd) = 0 then
-       raise Exception.Create(SysErrorMessage(GetLastError()));
+  FillChar(rabd, SizeOf(rabd), 0);
+  rabd.cbSize:= SizeOf(rabd);
+  rabd.hWnd := FHandle;
+  rabd.uCallbackMessage:= APPBAR_CALLBACK;
+  // register the application bar within the system
+  if SHAppBarMessage(ABM_NEW, rabd) = 0
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
 
-    gABRegistered := TRUE;
-  end;
+  gABRegistered := TRUE;
 end;
 
 procedure TAccessBar.UnregisterAppBar;
 var rabd: TAppBarData;
 begin
   if not gABRegistered then exit;
-  // check if the form is not being destroyed and not in the Delphi IDE
-  if not (csDesigning in ComponentState) then
-  begin
-    if not (csDestroying in ComponentState) then
-       TWinControl(Owner).WindowProc := FOwnerOriginalWndProc;
 
-    FillChar(rabd, SizeOf(rabd), 0);
-    rabd.cbSize:= SizeOf(rabd);
-    rabd.hWnd := FHandle;
-    // remove the application bar
-    if SHAppBarMessage(ABM_REMOVE, rabd) = 0 then
-       raise Exception.Create(SysErrorMessage(GetLastError()));
-    gABRegistered := FALSE;
-    FBoundRect := TRect.Empty;
-  end;
+  FillChar(rabd, SizeOf(rabd), 0);
+  rabd.cbSize:= SizeOf(rabd);
+  rabd.hWnd := FHandle;
+  // remove the application bar
+  if SHAppBarMessage(ABM_REMOVE, rabd) = 0
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
+  gABRegistered := FALSE;
+  FBoundRect := TRect.Empty;
 end;
 
 constructor TAccessBar.Create(AOwner: TComponent);
@@ -236,6 +260,16 @@ begin
     // for Delphi we only use descendants of TCustomForm
     if (AOwner is TCustomForm) then
     begin
+      // make sure we are the only one
+      for I:=0 to AOwner.ComponentCount -1 do
+      begin
+        if (AOwner.Components[I] is TAccessBar) and (AOwner.Components[I] <> Self)
+        then raise Exception.Create('Ooops, you need only *ONE* of these');
+      end;
+
+      FOwnerOriginalWndProc := TWinControl(Owner).WindowProc;
+      TWinControl(Owner).WindowProc := AppBWndProc;
+
       FHandle := TWinControl(AOwner).Handle;
       ahform := THiddenForm.CreateNew(nil);
       ahform.AccessHandle := FHandle;
@@ -243,12 +277,10 @@ begin
 
       FBoundRect := TRect.Empty;
 
-      // make sure we are the only one
-      for I:=0 to AOwner.ComponentCount -1 do
-      begin
-        if (AOwner.Components[I] is TAccessBar) and (AOwner.Components[I] <> Self) then
-           raise Exception.Create('Ooops, you need only *ONE* of these');
-      end;
+      FTaskbarCreated := RegisterWindowMessage('TaskbarCreated');
+      if (FTaskbarCreated = 0)
+      then raise Exception.Create(SysErrorMessage(GetLastError));
+      ChangeWindowMessageFilterEx(FHandle, FTaskbarCreated);
     end
     else
       raise Exception.Create('Sorry, can''t do this only with TCustomForms');
@@ -266,6 +298,8 @@ end;
 
 destructor TAccessBar.Destroy;
 begin
+  TWinControl(Owner).WindowProc := FOwnerOriginalWndProc;
+
   if Assigned(ahform) then
   begin
     ahform.FAccessHandle := 0;
@@ -286,8 +320,6 @@ var
   iHeight, iWidth: Integer;
   rabd: TAppBarData;
 begin
-  if (csDesigning in ComponentState) then Exit;
-
   if not InRange(MonitorNum, 0, Screen.MonitorCount-1)
   then MonitorNum := Screen.PrimaryMonitor.MonitorNum;
 
@@ -299,8 +331,8 @@ begin
 
   if not AutoHide then
   // query the new position
-  if SHAppBarMessage(ABM_QUERYPOS, rabd) = 0 then
-    raise Exception.Create(SysErrorMessage(GetLastError()));
+  if SHAppBarMessage(ABM_QUERYPOS, rabd) = 0
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
 
   iWidth := rabd.rc.Width;
   iHeight := rabd.rc.Height;
@@ -330,9 +362,9 @@ begin
   end;
 
   // set the new size
-  if not AutoHide then
-    if SHAppBarMessage(ABM_SETPOS, rabd) = 0 then
-      raise Exception.Create(SysErrorMessage(GetLastError()));
+  if (not AutoHide)
+     and (SHAppBarMessage(ABM_SETPOS, rabd) = 0)
+  then raise Exception.Create(SysErrorMessage(GetLastError()));
 
   // request the new size
   if Assigned(FQuerySized)
@@ -389,6 +421,21 @@ procedure TAccessBar.AppBWndProc(var Msg: TMessage);
 var rabd: TAppBarData;
 begin
   case Msg.Msg of
+    APPBAR_TASKBARSTARTED:
+      begin
+        // TODO: Check logic
+        if (AutoHide)
+        then
+          SetSide(FSide)
+        else begin
+          UnregisterAppBar;
+          RegisterAppBar;
+        end;
+      end;
+    APPBAR_FULLSCREENAPP:
+      begin
+        Self.AppBarFullScreenApp(Msg.LParam <> 0);
+      end;
     APPBAR_CALLBACK:
       begin
         case Msg.wParam of
@@ -411,6 +458,10 @@ begin
         SHAppBarMessage(ABM_ACTIVATE, rabd);
         inherited;
       end;
+    else begin
+      if (Msg.Msg = FTaskbarCreated)
+      then PostMessage(FHandle, APPBAR_TASKBARSTARTED, 0, 0);
+    end;
   end;
   // call the original WndProc
   if Assigned(FOwnerOriginalWndProc) then FOwnerOriginalWndProc(Msg);
@@ -422,8 +473,6 @@ var
   rabd: TAppBarData;
   hr: Cardinal;
 begin
-  if (csDesigning in ComponentState) then Exit;
-
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize := SizeOf(rabd);
   rabd.hWnd := FHandle;
@@ -450,31 +499,32 @@ begin
     if Assigned(FQueryAutoHide) then
       FQueryAutoHide(Self, TRUE);
 
-    SetWindowPos(FHandle, HWND_TOPMOST, 0, 0, 0, 0,
+    SetWindowPos(FHandle, HWND_STYLE[FStayOnTop], 0, 0, 0, 0,
       SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_NOOWNERZORDER);
 
     AppBarQuerySetPos;
-  end else begin
-      FAutoHide := FALSE;
-      RegisterAppBar;
+  end
+  else begin
+    FAutoHide := FALSE;
+    RegisterAppBar;
 
-      SetWindowPos(FHandle, HWND_TOPMOST, 0, 0, 0, 0,
-        SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_NOOWNERZORDER);
+    SetWindowPos(FHandle, HWND_STYLE[FStayOnTop], 0, 0, 0, 0,
+      SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_NOOWNERZORDER);
 
-      AppBarQuerySetPos;
-      if Assigned(FQueryAutoHide)
-      then FQueryAutoHide(Self, FALSE);
-      if AEnabled then
-      begin
-        td := TTaskDialog.Create(Self.Owner);
-        td.MainIcon := tdiInformation;
-        td.Caption := APP_NAME_LINKBAR;
-        td.Title := '';
-        td.text := MUILoadResString(LB_FN_TOOLBAR, LB_RS_TB_AUTOHIDEALREADYEXISTS);
-        td.CommonButtons := [tcbOk];
-        td.Execute;
-        td.Free;
-      end;
+    AppBarQuerySetPos;
+    if Assigned(FQueryAutoHide)
+    then FQueryAutoHide(Self, FALSE);
+    if AEnabled then
+    begin
+      td := TTaskDialog.Create(Self.Owner);
+      td.MainIcon := tdiInformation;
+      td.Caption := APP_NAME_LINKBAR;
+      td.Title := '';
+      td.text := L10nMui(LB_FN_TOOLBAR, LB_RS_TB_AUTOHIDEALREADYEXISTS);
+      td.CommonButtons := [tcbOk];
+      td.Execute;
+      td.Free;
+    end;
   end;
 end;
 
@@ -486,10 +536,9 @@ end;
 procedure TAccessBar.AppBarFullScreenApp(AEnabled: Boolean);
 var Flags: HWND;
 begin
-  Flags := HWND_BOTTOM;
-
-  if not AEnabled and AutoHide
-  then Flags := HWND_TOPMOST;
+  if AEnabled
+  then Flags := HWND_BOTTOM
+  else Flags := HWND_STYLE[FStayOnTop];
 
   SetWindowPos(FHandle, Flags, 0, 0, 0, 0,
     SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_NOOWNERZORDER);

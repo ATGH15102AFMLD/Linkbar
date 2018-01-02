@@ -7,7 +7,7 @@ unit LBToolbar;
 
 {$i linkbar.inc}
 
-{;$define CHACE_BB_ICON}                                                         // chache Bit Bucket icon
+{;$define CHACE_BB_ICON}                                                        // chache Bit Bucket icon. However, if the user changes the icon of the Bit Bucket, this is incorrect.
 
 interface
 
@@ -59,10 +59,6 @@ implementation
 
 uses Winapi.ActiveX, Winapi.ShellAPI, System.Win.ComObj, Winapi.KnownFolders,
      Linkbar.OS, Linkbar.Consts, Linkbar.Shell;
-
-const
-  ICON_SHIELD_FLAG = $08000; // draw the shield overlay
-  ICON_INDEX_MASK  = ICON_SHIELD_FLAG - 1;
 
 var
   FKnownFolderManager: IKnownFolderManager;
@@ -130,14 +126,10 @@ begin
      and (pidl <> APidl)
   then CoTaskMemFree(pidl);
 
-  if Succeeded(hr)
-  then begin
-    if Succeeded( pKnownFolder.GetId(id) )
-    then begin
-      if (id = FOLDERID_RecycleBinFolder)
-      then Result := True;
-    end;
-  end;
+  Result := Succeeded(hr)
+            and Assigned(pKnownFolder)
+            and Succeeded( pKnownFolder.GetId(id) )
+            and (id = FOLDERID_RecycleBinFolder);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////

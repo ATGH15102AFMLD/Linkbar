@@ -20,10 +20,14 @@ type
 
   TAutoShowMode = (smMouseHover = 0, smMouseClickLeft = 1, smMouseClickRight = 2);
 
+  TJumplistShowMode = (jsmDisabled = 0, jsmMouseClickRight = 1);
+
 const
   APP_NAME_LINKBAR = 'Linkbar';
   URL_WEB = 'https://sourceforge.net/projects/linkbar/';
   URL_EMAIL = 'linkbar@yandex.ru';
+
+  URL_WINDOWS_HOTKEY = 'https://support.microsoft.com/en-ie/help/12445/windows-keyboard-shortcuts';
 
   // Supported extentions
   ES_ARRAY: array[0..2] of string = ('.lnk', '.url', '.website');
@@ -37,6 +41,7 @@ const
 
   DN_SHARED_BARS = 'Shared bars\';
   DN_USER_BARS = 'User bars\';
+  DN_LOCALES = 'Locales/';
   EXT_LBR = '.lbr';
   MASK_LBR = '*' + EXT_LBR;
 
@@ -70,9 +75,12 @@ const
   ITEM_NONE = -1;
   ITEM_ALL  = -1;
 
+  TIMER_AUTO_HIDE_DELAY = 300;
+
   DEF_AUTOHIDE              = False;
   DEF_AUTOHIDE_TRANSPARENCY = False;
   DEF_AUTOHIDE_SHOWMODE     = Integer(Low(TAutoShowMode));
+  DEF_AUTOHIDE_HOTKEY       = '$0007004C'; // Shift+Ctrl+Alt+L
   DEF_DIR_LINKS             = '.\links';
   DEF_EDGE                  = Integer(saTop);
   DEF_HINT_SHOW             = True;
@@ -91,7 +99,9 @@ const
   DEF_TXTCOLOR              = $00000000;
   DEF_USECOLOR              = False;
   DEF_GLOWSIZE              = 12;
-  DEF_ENABLE_AG   = False;
+  DEF_ENABLE_AG             = False;
+  DEF_JUMPLISTSHOWMODE      = Integer(jsmMouseClickRight);
+  DEF_STAYONTOP             = True;
 
   // INI sections
   INI_SECTION_MAIN          = 'Main';                                           { Main }
@@ -100,6 +110,7 @@ const
   INI_AUTOHIDE              = 'autohide';
   INI_AUTOHIDE_TRANSPARENCY = 'autohidetransparency';
   INI_AUTOHIDE_SHOWMODE     = 'autohideshowmode';
+  INI_AUTOHIDE_HOTKEY       = 'autohidehotkey';
   INI_DIR_LINKS             = 'dirlinks';
   INI_EDGE                  = 'edge';
   INI_HINT_SHOW             = 'hintshow';
@@ -120,6 +131,8 @@ const
   INI_USETXTCOLOR           = 'usetxtcolor';
   INI_TXTCOLOR              = 'txtcolor';                                       { Text color }
   INI_GLOWSIZE              = 'glowsize';
+  INI_JUMPLISTSHOWMODE      = 'jumplistshowmode';
+  INI_STAYONTOP             = 'stayontop';
 
   INI_ENABLE_AG   = 'enableaeroglass';
 

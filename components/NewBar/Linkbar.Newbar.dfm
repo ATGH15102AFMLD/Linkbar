@@ -77,7 +77,7 @@ object BarCreatorWCl: TBarCreatorWCl
     Width = 404
     Height = 17
     Anchors = [akLeft, akTop, akRight]
-    Caption = 'Only for &me'
+    Caption = 'Only for &me (%s)'
     TabOrder = 1
     TabStop = True
     ExplicitWidth = 408
@@ -126,6 +126,7 @@ object BarCreatorWCl: TBarCreatorWCl
       Width = 79
       Height = 25
       Anchors = [akTop, akRight]
+      Cancel = True
       Caption = 'C&ancel'
       TabOrder = 2
       OnClick = btnCancelClick

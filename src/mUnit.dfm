@@ -12,10 +12,10 @@ object LinkbarWcl: TLinkbarWcl
   Font.Style = []
   FormStyle = fsStayOnTop
   OldCreateOrder = False
-  Position = poDefault
   OnContextPopup = FormContextPopup
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnKeyDown = FormKeyDown
   OnMouseDown = FormMouseDown
   OnMouseEnter = FormMouseEnter
   OnMouseLeave = FormMouseLeave
@@ -59,10 +59,10 @@ object LinkbarWcl: TLinkbarWcl
       GroupIndex = 2
       OnClick = imLockBarClick
     end
-    object imSortAlphabetically: TMenuItem
+    object imSortAlphabet: TMenuItem
       Caption = 'Sort alphabetically'
       GroupIndex = 2
-      OnClick = imSortAlphabeticallyClick
+      OnClick = imSortAlphabetClick
     end
     object imProperties: TMenuItem
       Caption = 'Properties'

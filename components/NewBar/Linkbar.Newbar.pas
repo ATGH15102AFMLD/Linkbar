@@ -38,6 +38,7 @@ type
     FWorkinDirectoryPath: string;
     procedure UpdateThemeStyle;
     function ScaleDimension(const X: Integer): Integer;
+    procedure L10n;
   protected
     procedure WMSysColorChanged(var message : TMessage); message WM_SYSCOLORCHANGE;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
@@ -51,7 +52,7 @@ implementation
 {$R *.dfm}
 
 uses ShlObj, System.IniFiles, Vcl.Themes, Linkbar.Common,
-     Linkbar.Shell, Linkbar.Consts, Linkbar.Loc, Linkbar.Themes, MyHint;
+     Linkbar.Shell, Linkbar.Consts, Linkbar.L10n, Linkbar.Themes, MyHint;
 
 function GetUserNameEx(NameFormat: DWORD; lpBuffer: LPWSTR; var nSize: DWORD): Boolean;
   stdcall; external 'secur32.dll' Name 'GetUserNameExW';
@@ -90,7 +91,7 @@ end;
 procedure TBarCreatorWCl.btnCreateClick(Sender: TObject);
 var
   lini: TIniFile;
-  lfilename: string;
+  lfilename, cmd: string;
 begin
   if rbAppDir.Checked
   then begin
@@ -106,11 +107,24 @@ begin
   lini := TIniFile.Create(lfilename);
   lini.WriteString(INI_SECTION_MAIN, INI_DIR_LINKS, FWorkinDirectoryPath);
   lini.Free;
-	
-	LBCreateProcess( ParamStr(0), LBCreateCommandParam(CLK_LANG, IntToStr(LbLangID))
-    + LBCreateCommandParam(CLK_FILE, lfilename) );
-    
+
+  cmd := LBCreateCommandParam(CLK_FILE, lfilename);
+  if (Locale <> '')
+  then cmd := LBCreateCommandParam(CLK_LANG, Locale) + cmd;
+  LBCreateProcess(ParamStr(0), cmd);
+
   Close;
+end;
+
+procedure TBarCreatorWCl.L10n;
+begin
+  L10nControl(Self,       'New.Caption');
+  L10nControl(Label1,     'New.ToWhom');
+  L10nControl(rbAppDir,   'New.ForAll');
+  L10nControl(rbUserDir,  'New.ForMe');
+  L10nControl(lblWorkDir, 'New.Folder');
+  L10nControl(btnCreate,  'New.Create');
+  L10nControl(btnCancel,  'New.Cancel');
 end;
 
 procedure TBarCreatorWCl.Button1Click(Sender: TObject);
@@ -129,13 +143,13 @@ begin
   HintWindowClass := TTooltipHintWindow;
 
   Font.Name := Screen.IconFont.Name;
-  LbTranslateComponent(Self);
+  L10n;
 
   ReduceSysMenu(Handle);
 
   UpdateThemeStyle;
 
-  FileOpenDialog_NL.Title := MUILoadResString(LB_FN_TOOLBAR, LB_RS_TB_NEWTOOLBAROPENDIALOGTITLE);
+  FileOpenDialog_NL.Title := L10nMui(LB_FN_TOOLBAR, LB_RS_TB_NEWTOOLBAROPENDIALOGTITLE);
 
   InitiatedAppDir := ExtractFilePath(Application.ExeName) + DN_SHARED_BARS;
   InitiatedUserDir := GetLinkbarRoamingFolderPath + DN_USER_BARS;
@@ -148,7 +162,7 @@ begin
   edtWorkDir.Color := Self.Color;
 
   if GetLoggedOnUserName(username)
-  then rbUserDir.Caption := rbUserDir.Caption + Format(' (%s)',[username]);
+  then rbUserDir.Caption := Format(rbUserDir.Caption,[username]);
 
   Label1.ShowHint := True;
   Label1.Hint := RemovePrefix(rbAppDir.Caption)

@@ -97,6 +97,32 @@ end;
 
 procedure ExplorerMenuPopup(const AWnd: HWND; const APidl: PItemIDList;
   const AScrPt: TPoint; const AShift: Boolean; const ASubMenu: HMENU);
+
+  procedure RemoveMultipleSeparators(const AMenu: HMENU);
+  var i, count: Integer;
+      separator: Boolean;
+      mi: TMenuItemInfo;
+  begin
+    FillChar(mi, SizeOf(mi), 0);
+    mi.cbSize := SizeOf(mi);
+    mi.fMask := MIIM_FTYPE;
+    separator := True;
+    count := GetMenuItemCount(AMenu);
+    i := 0;
+    while (i < count) do
+    begin
+      mi.fType := 0;
+      if (GetMenuItemInfo(AMenu, i, True, mi))
+         and (mi.fType = MFT_SEPARATOR)
+         and separator
+      then DeleteMenu(AMenu, i, MF_BYPOSITION)
+      else Inc(i);
+      separator := mi.fType = MFT_SEPARATOR
+    end;
+    if (count > 0) and separator
+    then DeleteMenu(AMenu, count-1, MF_BYPOSITION);
+  end;
+
 var
   CoInit: HRESULT;
   Menu: HMenu;
@@ -112,7 +138,6 @@ var
   miinfo: TMenuItemInfo;
   hIco: HICON;
   hbmp: HBITMAP;
-  hr: HRESULT;
   iconsize: Integer;
 begin
   CoInit := CoInitializeEx(nil, COINIT_MULTITHREADED);
@@ -163,12 +188,10 @@ begin
             miinfo.dwTypeData := PChar('Linkbar');
             InsertMenuItem(Menu, insertBefore, True, miinfo);
 
-            hr := S_OK;
+            // Icon for Linkbar submenu item
             iconsize := GetSystemMetrics(SM_CXSMICON);
-            hIco := LoadImage(HInstance, MakeIntResource('MAINICON'), IMAGE_ICON,
-              iconsize, iconsize, LR_DEFAULTCOLOR); {}
-            if Succeeded(hr)
-               and (hIco <> 0)
+            hIco := LoadImage(HInstance, MakeIntResource('MAINICON'), IMAGE_ICON, iconsize, iconsize, LR_DEFAULTCOLOR);
+            if (hIco <> 0)
             then begin
               hbmp := BitmapFromIcon(hIco, GetSystemMetrics(SM_CXSMICON));
               DestroyIcon(hIco);
@@ -178,6 +201,9 @@ begin
               miinfo.hbmpItem := hbmp;
               SetMenuItemInfo(Menu, insertBefore, True, miinfo);
             end;
+
+            // Sometimes menus have multiple separators e.g. for html shortcut. In Explorer.exe there is no such
+            RemoveMultipleSeparators(Menu);
           end;
 
           ICMenu.QueryInterface(IContextMenu2, g_cm2);

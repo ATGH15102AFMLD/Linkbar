@@ -91,6 +91,7 @@ type
     LastHue: Integer;
     TextEnter: Boolean;
     AlpBarHeight: Integer;
+    procedure L10n;
   public
     procedure PaintVar;
     procedure PaintColorHue;
@@ -104,7 +105,7 @@ implementation
 {$R *.dfm}
 
 uses
-  ColorUtils, GdiPlusHelpers, GdiPlus;
+  ColorUtils, GdiPlusHelpers, GdiPlus, Linkbar.L10n;
 
 function TfrmColorPicker.GetColor: Cardinal;
 begin
@@ -244,6 +245,13 @@ begin
   TextEnter := False;
 end;
 
+procedure TfrmColorPicker.L10n;
+begin
+  L10nControl(Self, 'Color.Caption');
+  L10nControl(btnOk, 'Color.OK');
+  L10nControl(btnCancel, 'Color.Cancel');
+end;
+
 procedure TfrmColorPicker.FormCreate(Sender: TObject);
 const
   Colors: array[0..15] of TColor = (clBlack, clWhite, clGray, clSilver,
@@ -252,6 +260,8 @@ const
 var
   i: Integer;
 begin
+  L10n;
+
   AlpBarHeight := imgAlpha.Height - 1;
 
   HBoxBmp := TBitmap.Create;

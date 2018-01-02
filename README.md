@@ -1,3 +1,11 @@
+
+
+
+![Delphi](https://img.shields.io/badge/Delphi-XE3-red.svg)
+![Windows](https://img.shields.io/badge/Windiws-Vista--10-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
+
+
 What is Linkbar ?
 ===============================
 Linkbar is a free source code desktop toolbar. Running in the MS Windows Vista+ environment, its use is governed by
