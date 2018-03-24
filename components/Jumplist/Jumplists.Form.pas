@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Jumplists.Form;
@@ -10,61 +10,59 @@ unit Jumplists.Form;
 interface
 
 uses
-	Windows, System.SysUtils, System.Types, System.Classes, Vcl.Graphics,
+	Windows, System.SysUtils, System.Types, System.Classes, Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Menus, System.Generics.Collections, System.UITypes,
-  Winapi.Messages, Winapi.ShlObj,	Winapi.CommCtrl, JumpLists.Api;
+  Winapi.Messages, Winapi.ShlObj,	Winapi.CommCtrl, JumpLists.Api_2,
+  Linkbar.Consts, Linkbar.Graphics;
 
 type
-  TVtItemStyle = (vtItem, vtGroup, vtSeparator, vtEmpty, vtFooter);
-
-  TVtItem = record
-    Style: TVtItemStyle;
-    Group: Integer;
-    Item: Integer;
-    Rect: TRect;
-    Icon: Integer;
-    IsLatesPinned: Boolean;
-    Pinnable: Boolean;
-    Caption: string;
-    function IsSelectable: Boolean;
-    function IsHeader: Boolean;
-  end;
-
-  TVtList = TList<TVtItem>;
-
-  TJumplistAlign = (jaLeft = 0, jaTop = 1, jaRight = 2, jaBottom = 3);
-
-  TIconCache = TDictionary<Cardinal, Integer>;
-
   TFormJumpList = class(TForm)
+  private
+    type
+      TVtItemStyle = (vtItem, vtGroup, vtSeparator, vtEmpty, vtFooter);
+
+      TVtItem = record
+        Style: TVtItemStyle;
+        Group: Integer;
+        Item: Integer;
+        Rect: TRect;
+        Icon: Integer;
+        IsLatesPinned: Boolean;
+        Pinnable: Boolean;
+        Caption: string;
+        function IsSelectable: Boolean;
+        function IsHeader: Boolean;
+      end;
+
+      TVtList = TList<TVtItem>;
+
+      TIconCache = TDictionary<Cardinal, Integer>;
   private
     FJumpList: TJumpList;
     FAppId: String;
     FAppExe: PItemIDList;
     FWnd: HWND;
     FMaxCount: Integer;
-    FJumpItemIndex: DWORD;
     FPopupMenu: TPopupMenu;
     FIconSize: Integer;
     FX, FY: Integer;
-    FAlign: TJumplistAlign;
+    FAlign: TScreenAlign;
     FVtList: TVtList;
     FPopupMenuVisible: Boolean;
     FHotSelectedByMouse: Boolean;
-    oBgBmp: TBitmap;
+    oBgBmp: THBitmap;
+    oFont: TFont;
     oIconCache: TIconCache;
     RectBody: TRect;
     RectFooter: TRect;
     procedure OnFormClick(Sender: TObject);
     procedure OnFormClose(Sender: TObject; var Action: TCloseAction);
-    procedure OnFormContextPopup(Sender: TObject; MousePos: TPoint;
-      var Handled: Boolean);
+    procedure OnFormContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     procedure OnFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure CMDialogKey(var AMsg: TCMDialogKey); message CM_DIALOGKEY;
     procedure OnFormMouseLeave(Sender: TObject);
     procedure OnFormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
-    procedure OnFormMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
+    procedure OnFormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     function GetItemIndexAt(AX, AY: Integer): Integer;
     procedure JumpListPopupMenuPopup(const X, Y: Integer);
     procedure OnJumpListPin(Sender: TObject);
@@ -80,16 +78,16 @@ type
       AIconSize: Integer): Integer; overload;
     function GetIcon(AFolder: IShellFolder; AChild: PItemIDList;
       AIconSize: Integer): Integer; overload;
-    function UpdateJumpList: Boolean;
+    function UpdateJumpList(const AUpdateList: Boolean = True): Boolean;
   private
     hLvTheme: HTHEME;
     procedure PrepareBackground(const AWidth, AHeight: Integer);
-    procedure DrawJumplistItem(const AIndex: Integer; ASelected,
-      APinActive: Boolean; ADrawBackground: Boolean = True);
-    procedure PaintForm;
+    procedure DrawJumplistItem(const ADc: HDC; const AIndex: Integer;
+      const ASelected, APinActive: Boolean; ADrawBackground: Boolean = True);
+    procedure PaintForm(ASrcDc: HDC);
   private
     LastPinUnpinHash: Cardinal;
-    _FHotIndex: Integer;
+    FHotIndex: Integer;
     procedure SetHotIndex(AValue: integer);
     procedure AlphaBlendAndClose;
     function PinSelected: boolean; inline;
@@ -107,20 +105,36 @@ type
     function GetDescription(const AItem: TVtItem; const AText: PChar; ASize: Integer): Boolean;
     procedure WMTimer(var Message: TMessage); message WM_TIMER;
   private
+    ListWidth: Integer;
+    ItemWidth: Integer;
+    ItemHeight: Integer;
+    ItemSpacing: Integer;
+    ItemPadding: Integer;
+    ItemMargin: Integer;
+    TextOffset: Integer;
+    TextGroupOffset: Integer;
+    PinButtonWidth: Integer;
+    FormOffset: Integer;
+    TextColorGroup: TColor;
+    TextColorItem: TColor;
+    TextColorItemSelected: TColor;
+    TextColorItemNew: TColor;
     TempX, TempY: Integer;
+    property HotIndex: Integer read FHotIndex write SetHotIndex;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
     procedure PaintWindow(DC: HDC); override;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
     procedure WMKillFocus(var Message: TWMKillFocus); message WM_KILLFOCUS;
+    procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   public
     constructor CreateNew(AOwner: TComponent; Dummy: Integer = 0); override;
     destructor Destroy; override;
-    function Popup(AWnd: HWND; AX, AY: Integer; AAlign: TJumplistAlign;
-      const AAppId: String; AAppExe: PItemIDList; AMaxCount: Integer): Boolean;
-    property HotIndex: Integer read _FHotIndex write SetHotIndex;
+    function Popup(AWnd: HWND; APt: TPoint; AAlign: TScreenAlign): Boolean;
   end;
 
+  function TryCreateJumplist(AOwner: TComponent; const APidl: PItemIDList;
+    const AMaxRecentCount: Integer): TFormJumpList;
   procedure JumpListClose;
 
 implementation
@@ -146,35 +160,58 @@ const
 var
   _JumpList: TFormJumpList = nil;
 
-  ListWidth: Integer = 0;
-  ItemWidth: Integer = 0;
-  ItemHeight: Integer = 0;
-  ItemSpacing: Integer = 0;
-  ItemPadding: Integer = 0;
-  ItemMargin: Integer = 0;
-  TextOffset: Integer = 0;
-  TextGroupOffset: Integer = 0;
-  PinButtonWidth: Integer = 0;
-  FormOffset: Integer = 0;
-
-  TextColorGroup: TColor;
-  TextColorItem: TColor;
-  TextColorItemSelected: TColor;
-  TextColorItemNew: TColor;
-
-{ TVtItem }
-
-function TVtItem.IsSelectable: Boolean;
+function TryCreateJumplist(AOwner: TComponent; const APidl: PItemIDList;
+  const AMaxRecentCount: Integer): TFormJumpList;
+var appid: array[0..MAX_PATH] of Char;
+    list: TJumplist;
+    g, i, count: Integer;
+    jg: TJumpGroup;
+    ji: TJumpItem;
+    form: TFormJumpList;
 begin
-  Result := Style in [vtItem, vtFooter];
+  Result := nil;
+  appid[0] := #0;
+  if GetAppInfoForLink(APidl, appid)
+     and (appid[0] <> #0)
+     and HasJumplist(appid)
+  then begin
+    list := TJumplist.Create;
+    if GetJumplist(appid, list, AMaxRecentCount)
+    then begin
+      // Ñalculation of useful items
+      // Skip hidden group/item and separator
+      count := 0;
+      for g := 0 to list.Groups.Count-1 do
+      begin
+        jg := list.Groups[g];
+        if jg.Hidden
+        then Continue;
+
+        for i := 0 to jg.Items.Count-1 do
+        begin
+          ji := jg.Items[i];
+          if ji.Hidden
+             or (ji.eType = jiSeparator)
+          then Continue;
+          Inc(count);
+        end;
+      end;
+      if (count > 0)
+      then begin
+        // Create Jumplist form
+        form := TFormJumpList.CreateNew(AOwner);
+        form.FAppId := string(appid);
+        form.FAppExe := APidl;
+        form.FMaxCount := AMaxRecentCount;
+        form.FJumpList := list;
+        Exit(form);
+      end;
+    end;
+    list.Free;
+  end;
 end;
 
-function TVtItem.IsHeader: Boolean;
-begin
-  Result := not IsSelectable;
-end;
-
-// Macros from windowsx.h:   
+// Macros from windowsx.h:
 // Important  Do not use the LOWORD or HIWORD macros to extract the x- and y-
 // coordinates of the cursor position because these macros return incorrect results
 // on systems with multiple monitors. Systems with multiple monitors can have
@@ -233,8 +270,8 @@ begin
     then begin
       // check "Taskbar animation"
       Result := reg.OpenKeyReadOnly(ATB_KEY_1)
-         and (reg.GetDataType(ATB_PROP_1) = rdInteger)
-         and (reg.ReadInteger(ATB_PROP_1) <> 0);
+        and (reg.GetDataType(ATB_PROP_1) = rdInteger)
+        and (reg.ReadInteger(ATB_PROP_1) <> 0);
     end;
   finally
     reg.Free;
@@ -242,9 +279,24 @@ begin
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
+// TVtItem
+////////////////////////////////////////////////////////////////////////////////
+
+function TFormJumpList.TVtItem.IsSelectable: Boolean;
+begin
+  Result := Style in [vtItem, vtFooter];
+end;
+
+function TFormJumpList.TVtItem.IsHeader: Boolean;
+begin
+  Result := not IsSelectable;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
 // TFormJumpList
 ////////////////////////////////////////////////////////////////////////////////
 
+{$REGION ' GetCursorHeightMargin '}
 { GetCursorHeightMargin from Vcl.Forms.pas
   Return number of scanlines between the scanline containing cursor hotspot
     and the last scanline included in the cursor mask. }
@@ -329,6 +381,7 @@ begin
     if IconInfo.hbmMask <> 0 then DeleteObject(IconInfo.hbmMask);
   end;
 end;
+{$ENDREGION}
 
 function TFormJumpList.ScaleDimension(const X: Integer): Integer;
 begin
@@ -346,9 +399,8 @@ begin
   _JumpList := Self;
   FormStyle := fsStayOnTop;
   KeyPreview := True;
-  Color := clRed;
 
-  _FHotIndex := INDEX_NONE;
+  FHotIndex := INDEX_NONE;
 
   OnClick := OnFormClick;
   OnClose := OnFormClose;
@@ -364,7 +416,7 @@ begin
 
   ListWidth := ScaleDimension(269);
 
-  if (IsWindows10)
+  if IsWindows10
   then begin
     ItemMargin := 0;
     ItemPadding := ScaleDimension(6);
@@ -401,7 +453,7 @@ begin
     ImageList_AddIcon(hImageList, info.hIcon);
     DestroyIcon(info.hIcon);
   end;
-  // Add pin ans unpin icons
+  // Add pin and unpin icons
   h := LoadLibraryEx(PChar('imageres.dll'), 0, LOAD_LIBRARY_AS_DATAFILE);
   if (h <> 0)
   then begin
@@ -428,10 +480,10 @@ begin
   TextColorItemSelected := clHighlightText;
   TextColorItemNew := clInfoText;
 
-  if (IsWindows10)
+  if IsWindows10
   then begin
     // For Windows 10
-    TextColorGroup := clWhite;
+    TextColorGroup := clSilver;
     TextColorItem := clWhite;
     TextColorItemSelected := clWhite;
     TextColorItemNew := clBlack;
@@ -444,14 +496,14 @@ begin
       if (hLvTheme <> 0)
       then begin
         hr := GetThemeColor(hLvTheme, LVP_GROUPHEADER, LVGH_OPEN, TMT_HEADING1TEXTCOLOR, color);
-        if ( hr = S_OK )
+        if (hr = S_OK)
         then TextColorGroup := TColorRef(color);
       end;
 
       TextColorItem := clMenuText;
 
       if HighContrastEnabled
-      then TextColorItemSelected := clHighlightText
+      then TextColorItemSelected := clWindowText
       else TextColorItemSelected := clMenuText;
 
       TextColorItemNew := TextColorItem;
@@ -473,15 +525,14 @@ begin
   LastPinUnpinHash := 0;
   TipHwnd := 0;
 
-  FJumpList := TJumpList.Create;
-
   FVtList := TVtList.Create;
   FVtList.Capacity := 16;
 
-  oBgBmp := TBitmap.Create;
-  oBgBmp.PixelFormat := pf24bit;
+  oBgBmp := THBitmap.Create(24);
+  oFont := TFont.Create;
+  oFont.Assign(Screen.IconFont);
 
-  oIconCache := TIconCache.Create(16);
+  oIconCache := TIconCache.Create(8 + FMaxCount);
 end;
 
 procedure TFormJumpList.CreateParams(var Params: TCreateParams);
@@ -489,7 +540,7 @@ begin
   inherited CreateParams(Params);
   Params.Style := WS_POPUP or WS_BORDER;
   if (IsWindows7 and DwmCompositionEnabled)
-     or (IsWindows8And8Dot1)
+     or IsWindows8And8Dot1
   then Params.Style := Params.Style or WS_THICKFRAME;
 
   Params.ExStyle := (Params.ExStyle or WS_EX_TOOLWINDOW) and not WS_EX_APPWINDOW;
@@ -503,6 +554,7 @@ begin
   FJumpList.Free;
   FVtList.Free;
   oBgBmp.Free;
+  oFont.Free;
   oIconCache.Free;
   CloseThemeData(hLvTheme);
   ThemeJlDeinit;
@@ -511,14 +563,14 @@ end;
 
 function TFormJumpList.PinSelected: boolean;
 begin
-  Result := (_FHotIndex and INDEX_PIN) <> 0;
+  Result := (FHotIndex and INDEX_PIN) <> 0;
 end;
 
 function TFormJumpList.Index: Integer;
 begin
-  if (_FHotIndex = INDEX_NONE)
-  then Result := _FHotIndex
-  else Result := _FHotIndex and MASK_PIN;
+  if (FHotIndex = INDEX_NONE)
+  then Result := FHotIndex
+  else Result := FHotIndex and MASK_PIN;
 end;
 
 function TFormJumpList.GetIcon(APath: PChar; AIndex: Integer; AIconSize: Integer): Integer;
@@ -528,7 +580,7 @@ var res: Integer;
 begin
   //CharUpper(APath); see comment in overloaded GetIcon (below)
   key := CalcFNVHash( APath, CalcFNVHash(AIndex, 4) );
-  if not oIconCache.TryGetValue(key, res)
+  if (not oIconCache.TryGetValue(key, res))
   then begin
     icon := SHExtractIcon(APath, AIndex, AIconSize);
     if (icon <> 0)
@@ -574,7 +626,7 @@ begin
     if oIconCache.TryGetValue(key, res)
     then Exit(res);
 
-    if ( flags and GIL_NOTFILENAME = GIL_NOTFILENAME )
+    if (flags and GIL_NOTFILENAME = GIL_NOTFILENAME)
     then begin
       icon2 := 0;
       hr := pExtract.Extract(location, index, icon2, icon, MakeLong(AIconSize, AIconSize));
@@ -607,7 +659,7 @@ begin
         bUseFactory := True;
       end;
     end;
-    if ( flags and GIL_NOTFILENAME = 0 )
+    if (flags and GIL_NOTFILENAME = 0)
     then begin
       // the IExtractIcon object didn't do anything - use ShExtractIcon instead
       if (index = -1)
@@ -617,12 +669,12 @@ begin
   end;
 
   res := ICI_DEFAULT;
-  if (bUseFactory)
+  if bUseFactory
   then begin
-    if Succeeded( SHCreateItemWithParent(nil, AFolder, AChild, IShellItemImageFactory, pFactory) )
+    if Succeeded(SHCreateItemWithParent(nil, AFolder, AChild, IShellItemImageFactory, pFactory))
        and Assigned(pFactory)
     then begin
-      if Succeeded( pFactory.GetImage(TSize.Create(AIconSize, AIconSize), SIIGBF_ICONONLY, hbmp) )
+      if Succeeded(pFactory.GetImage(TSize.Create(AIconSize, AIconSize), SIIGBF_ICONONLY, hbmp))
       then begin
         res := ImageList_AddMasked(hImageList, hbmp, CLR_NONE);
         DeleteObject(hbmp);
@@ -666,7 +718,8 @@ begin
       pLink.GetIDList(pidl);
       location[0] := #0;
       hr := pLink.GetIconLocation(location, MAX_PATH, index);
-      if Succeeded(hr) and (location[0] <> #0)
+      if Succeeded(hr)
+         and (location[0] <> #0)
       then begin
         if (index = -1)
         then index := 0;
@@ -686,21 +739,20 @@ begin
   then begin
     child := nil;
     hr := SHBindToFolderIDListParent(nil, pidl, IShellFolder, Pointer(pFolder), child);
-    if Succeeded( hr )
+    if Succeeded(hr)
     then begin
       { next code extract preview from images (and ?) }
       // do some pidl laundering. sometimes the pidls from the jumplists may
       // contain weird hidden data, which affects the icon so do a round-trip
       // convertion of the pidl to a display name
       hr := pFolder.GetDisplayNameOf(child, SHGDN_FORPARSING, str);
-      if Succeeded( hr )
+      if Succeeded(hr)
       then begin
-        //name := StrRetToString(child, str);
         StrRetToStr(@str, child, name);
         child2 := nil;
         test := PathFindFileName(name);
         hr := pFolder.ParseDisplayName(0, nil, test, PULONG(nil)^, child2, PULONG(nil)^);
-        if Succeeded( hr )
+        if Succeeded(hr)
         then begin
           // make sure child2 points to the same item in the folder
           if ILIsChild(child2)
@@ -729,15 +781,13 @@ begin
   vi := FVtList[Index];
   if (vi.Style = vtItem)
   then begin
-    FJumpItemIndex := MakeLong(vi.Item, vi.Group);
-
     jg := FJumpList.Groups[vi.Group].eType;
 
     if vi.Pinnable
     then begin
       if PinSelected
       then begin
-        if ( jg = jgPinned )
+        if (jg = jgPinned)
         then OnJumpListUnPin(nil)
         else OnJumpListPin(nil);
       end
@@ -780,7 +830,6 @@ begin
 
     if (vi.Style = vtItem)
     then begin
-      FJumpItemIndex := MakeLong(vi.Item, vi.Group);
       MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
       JumpListPopupMenuPopup(pt.X, pt.Y);
       Exit;
@@ -799,14 +848,10 @@ begin
   end;
 end;
 
-procedure TFormJumpList.OnFormKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
-begin
-  KeyboardControl(Key);
-end;
-
 procedure TFormJumpList.KeyboardControl(const AKeyCode: Word);
+// TODO: save? pin selected state
 var i: Integer;
+    //pin: Integer;
 begin
   if (FVtList.Count = 0)
   then Exit;
@@ -822,25 +867,45 @@ begin
       begin
         Click;
       end;
+    VK_DELETE:
+      begin
+        // Unpin pinned; Remove recent, frequent, custom; Nothing for task
+        i := Index;
+        if (i <> INDEX_NONE)
+        then begin
+          case FJumpList.Groups[FVtList.Items[i].Group].eType of
+            jgPinned: OnJumpListUnPin(Self);
+            jgRecent, jgFrequent, jgCustom: OnJumpListRemove(Self);
+          end;
+        end;
+      end;
     VK_UP:  // Select prev non-header item
       begin
         i := Index;
+        //if (i <> INDEX_NONE)
+        //then pin := HotIndex and INDEX_PIN
+        //else pin := 0;
+
         Dec(i);
         if (i < 1)
         then i := FVtList.Count-1;
         if (not FVtList[i].IsSelectable)
         then Dec(i);
-        HotIndex := i;
+        HotIndex := i;// or pin;
       end;
     VK_DOWN: // Select next non-header item
       begin
         i := Index;
+        //if (Index <> INDEX_NONE)
+        //then pin := HotIndex and INDEX_PIN
+        //else pin := 0;
+
         Inc(i);
         if (i >= FVtList.Count)
         then i := 1;
         if (not FVtList[i].IsSelectable)
         then Inc(i);
-        HotIndex := i;
+        HotIndex := i;// or pin;
       end;
     VK_LEFT: // Unselect Pin
       begin
@@ -858,11 +923,14 @@ begin
     VK_TAB: // Select first item for next group or footer item
       begin
         i := Index;
+        //if (Index <> INDEX_NONE)
+        //then pin := HotIndex and INDEX_PIN
+        //else pin := 0;
+
         if (i < 1)
            or (i = FVtList.Count-1)
-        then
-          i := 1
-        else
+        then i := 1
+        else begin
           while (i < FVtList.Count) do
           begin
             Inc(i);
@@ -870,9 +938,15 @@ begin
                or (FVtList[i-1].IsHeader)
             then Break;
           end;
-        HotIndex := i;
+        end;
+        HotIndex := i;// or pin;
       end;
   end;
+end;
+
+procedure TFormJumpList.OnFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  KeyboardControl(Key);
 end;
 
 procedure TFormJumpList.CMDialogKey(var AMsg: TCMDialogKey);
@@ -911,7 +985,9 @@ procedure TFormJumpList.OnFormMouseMove(Sender: TObject; Shift: TShiftState; X,
 var idx: Integer;
     vi: TVtItem;
 begin
-  if (TempX = X) and (TempY = Y) then Exit;
+  if (TempX = X)
+     and (TempY = Y)
+  then Exit;
   TempX := X; TempY := Y;
 
   idx := GetItemIndexAt(X, Y);
@@ -921,7 +997,8 @@ begin
     vi := FVtList[idx];
     if (vi.Style in [vtItem, vtFooter])
     then begin
-      if (vi.Pinnable) and (X >= (vi.Rect.Right - PinButtonWidth))
+      if (vi.Pinnable)
+         and (X >= (vi.Rect.Right - PinButtonWidth))
       then idx := idx or INDEX_PIN;
     end
     else idx := INDEX_NONE;
@@ -960,19 +1037,26 @@ begin
   Message.Result := HTCLIENT;
 end;
 
-procedure TFormJumpList.DrawJumplistItem(const AIndex: Integer;
-  ASelected, APinActive: Boolean; ADrawBackground: Boolean = True);
+procedure TFormJumpList.WMEraseBkgnd(var Message: TWMEraseBkgnd);
+begin
+  Message.Result := 1;
+end;
+
+procedure TFormJumpList.DrawJumplistItem(const ADc: HDC; const AIndex: Integer;
+  const ASelected, APinActive: Boolean; ADrawBackground: Boolean = True);
 var vi: TVtItem;
     itemrect, pinrect: TRect;
     text: string;
     state, index: Integer;
     jlgt: TJumpGroupeType;
     color: TColor;
+    fnt0: HFONT;
+    clr0: COLORREF;
+    bck0: Integer;
 begin
-  if (AIndex < 0)
-     or (AIndex >= FVtList.Count)
-  then Assert(False);
-
+{$IFDEF DEBUG}
+  Assert( (AIndex >= 0) and (AIndex < FVtList.Count) );
+{$ENDIF}
   vi := FVtList[AIndex];
 
   if not (vi.Style in [vtItem, vtFooter])
@@ -983,8 +1067,8 @@ begin
   if (ADrawBackground)
   then begin
     if (vi.Style = vtFooter)
-    then ThemeJlDrawBackground(oBgBmp.Canvas.Handle, LBJL_BGPID_FOOTER, RectFooter, itemrect)
-    else ThemeJlDrawBackground(oBgBmp.Canvas.Handle, LBJL_BGPID_BODY, RectBody, itemrect);
+    then ThemeJlDrawBackground(ADc, LB_JLP_FOOTER, RectFooter,itemrect)
+    else ThemeJlDrawBackground(ADc, LB_JLP_BODY, RectBody, itemrect);
   end;
 
   jlgt := FJumpList.Groups[vi.Group].eType;
@@ -996,8 +1080,8 @@ begin
     then begin
       // Main button
       if (vi.Style = vtFooter)
-      then ThemeJlDrawButton(oBgBmp.Canvas.Handle, LBJL_ITPID_FOOT, LBJL_ITSID_SELECTED, itemrect)
-      else ThemeJlDrawButton(oBgBmp.Canvas.Handle, LBJL_ITPID_BTN, LBJL_ITSID_SELECTED, itemrect);
+      then ThemeJlDrawButton(ADc, LB_JLP_FOOTER_BUTTON, LB_JLS_SELECTED, itemrect)
+      else ThemeJlDrawButton(ADc, LB_JLP_BUTTON, LB_JLS_SELECTED, itemrect);
       // Pin button not needed
     end
     else begin
@@ -1005,52 +1089,58 @@ begin
       // Pin button
       pinrect := Bounds(itemrect.Right, itemrect.Top, PinButtonWidth, itemrect.Height);
       if (APinActive)
-      then state := LBJL_ITSID_SELECTED
-      else state := LBJL_ITSID_HOT;
-      ThemeJlDrawButton(oBgBmp.Canvas.Handle, LBJL_ITPID_PIN, state, pinrect);
+      then state := LB_JLS_SELECTED
+      else state := LB_JLS_HOT;
+      ThemeJlDrawButton(ADc, LB_JLP_PIN_BUTTON, state, pinrect);
       // Pin button icon
       if (jlgt = jgPinned)
       then index := ICI_UNPIN
       else index := ICI_PIN;
-      ImageList_Draw(hImageList, index, oBgBmp.Canvas.Handle,
+      ImageList_Draw(hImageList, index, ADc,
           pinrect.Left + (PinButtonWidth - FIconSize) div 2,
           pinrect.Top + ItemPadding, ILD_IMAGE);
       // Main button
-      if (APinActive)
-      then state := LBJL_ITSID_HOT
-      else state := LBJL_ITSID_SELECTED;
-      ThemeJlDrawButton(oBgBmp.Canvas.Handle, LBJL_ITPID_BTN_LFT, state, itemrect);
+      if APinActive
+      then state := LB_JLS_HOT
+      else state := LB_JLS_SELECTED;
+      ThemeJlDrawButton(ADc, LB_JLP_BUTTON_LEFT, state, itemrect);
     end;
   end
   else begin
     // Check and draw justnow pin/unpin item
-    if (vi.IsLatesPinned)
-    then ThemeJlDrawButton(oBgBmp.Canvas.Handle, LBJL_ITPID_BTN, LBJL_ITSID_NEW, itemrect);
+    if vi.IsLatesPinned
+    then ThemeJlDrawButton(ADc, LB_JLP_BUTTON, LB_JLS_NEW, itemrect);
   end;
 
   // Draw icon
-  ImageList_Draw(hImageList, vi.Icon, oBgBmp.Canvas.Handle,
+  ImageList_Draw(hImageList, vi.Icon, ADc,
     itemrect.Left + ItemPadding, itemrect.Top + ItemPadding, ILD_IMAGE);
 
   // Draw caption
-  if vi.Style = vtFooter
+  if (vi.Style = vtFooter)
   then text := vi.Caption
   else text := FJumpList.Groups[vi.Group].Items[vi.Item].Name;
 
   if ASelected
   then color := TextColorItemSelected
   else begin
-    if (vi.IsLatesPinned)
+    if vi.IsLatesPinned
     then color := TextColorItemNew
     else color := TextColorItem;
   end;
+  
+  fnt0 := SelectObject(ADc, oFont.Handle);
+  clr0 := SetTextColor(ADc, ColorToRGB(color));
+  bck0 := SetBkMode(ADc, TRANSPARENT);
 
-  oBgBmp.Canvas.Font.Color := color;
-  oBgBmp.Canvas.Brush.Style := bsClear;
   itemrect.Left := itemrect.Left + TextOffset;
   itemrect.Right := itemrect.Right - 1;
-  DrawText(oBgBmp.Canvas.Handle, text, -1, itemrect,
+  DrawText(ADc, text, -1, itemrect,
     DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS or DT_WORD_ELLIPSIS);
+
+  SelectObject(ADc, fnt0);
+  SetTextColor(ADc, clr0);
+  SetBkMode(ADc, bck0);
 end;
 
 procedure TFormJumpList.PrepareBackground(const AWidth, AHeight: Integer);
@@ -1059,32 +1149,34 @@ var i: Integer;
     tr, lr: TRect;
     text: string;
     fs: TFontStyles;
-    brush: HBRUSH;
-    //
     hcinfo: THighContrast;
+    dc: HDC;
+    brh0: HBRUSH;
+    fnt0: HFONT;
+    clr0: COLORREF;
+    bck0: Integer;
 begin
   oBgBmp.SetSize(AWidth, AHeight);
-  oBgBmp.Canvas.Font := Screen.IconFont;
+  dc := oBgBmp.Dc;
 
   { Draw body & footer backgrounds }
   if (FVtList.Last.Style = vtFooter)
-  then ThemeJlDrawBackground(oBgBmp.Canvas.Handle, LBJL_BGPID_FOOTER, RectFooter, RectFooter);
-  ThemeJlDrawBackground(oBgBmp.Canvas.Handle, LBJL_BGPID_BODY, RectBody, RectBody);
+  then ThemeJlDrawBackground(dc, LB_JLP_FOOTER, RectFooter, RectFooter);
+  ThemeJlDrawBackground(dc, LB_JLP_BODY, RectBody, RectBody);
 
   { Draw body-footer divider if Styles disabled }
-  if not StyleServices.Enabled
+  if (not StyleServices.Enabled)
   then begin
     hcinfo.cbSize := SizeOf(hcinfo);
     SystemParametersInfo(SPI_GETHIGHCONTRAST, hcinfo.cbSize, @hcinfo, 0);
-    if ( (hcinfo.dwFlags and HCF_HIGHCONTRASTON) <> 0 )
+    if ((hcinfo.dwFlags and HCF_HIGHCONTRASTON) <> 0)
     then begin
       lr := Rect(ItemMargin, RectBody.Bottom, RectBody.Right-ItemMargin, RectBody.Bottom + 1);
-      brush := GetSysColorBrush(COLOR_WINDOWTEXT);
-      FillRect(oBgBmp.Canvas.Handle, lr, brush);
+      FillRect(dc, lr, GetSysColorBrush(COLOR_WINDOWTEXT));
     end
     else begin
       lr := Rect(ItemMargin, RectBody.Bottom, RectBody.Right-ItemMargin, RectBody.Bottom + 2{3});
-      DrawEdge(oBgBmp.Canvas.Handle, lr, BDR_RAISEDINNER, BF_RECT);
+      DrawEdge(dc, lr, BDR_RAISEDINNER, BF_RECT);
     end;
   end; {}
 
@@ -1100,59 +1192,72 @@ begin
       vtItem, vtFooter:
       begin
         // Draw Item
-        DrawJumplistItem(i, False, False, False);
+        DrawJumplistItem(dc, i, False, False, False);
       end;
       //-----------------------------------------------------------------------
       vtGroup:
       begin
         // Draw Group
+        fs := oFont.Style;
+        if (not StyleServices.Enabled)
+        then oFont.Style := [fsBold];
+        fnt0 := SelectObject(dc, oFont.Handle);
+
+        // draw group header line
         text := FJumpList.Groups[vi.Group].Name;
-        if (IsWindows10)
+        if IsWindows10
         then begin
           lr := Rect(vi.Rect.Left + ItemPadding, vi.Rect.Bottom-ScaleDimension(1),
             vi.Rect.Right - ItemPadding, vi.Rect.Bottom);
-          brush := CreateSolidBrush($555555);
-          FillRect(oBgBmp.Canvas.Handle, lr, brush);
-          DeleteObject(brush);
+          brh0 := SelectObject(dc, GetStockObject(DC_BRUSH));
+          clr0 := SetDCBrushColor(dc, $555555);
+          FillRect(dc, lr, GetStockObject(DC_BRUSH));
+          SetDCBrushColor(dc, clr0);
+          SelectObject(dc, brh0);
         end
         else begin
           // calc text rect
           tr := vi.Rect;
-          DrawText(oBgBmp.Canvas.Handle, text, -1, tr,
+          DrawText(dc, text, -1, tr,
             DT_CALCRECT or DT_SINGLELINE or DT_VCENTER);
           // calc and darw group header line
           lr := Rect(tr.Right + ItemSpacing*2, vi.Rect.CenterPoint.Y, vi.Rect.Right, vi.Rect.CenterPoint.Y+1);
-          DrawThemeBackground(hLvTheme, oBgBmp.Canvas.Handle, LVP_GROUPHEADERLINE,
+          DrawThemeBackground(hLvTheme, dc, LVP_GROUPHEADERLINE,
             LVGHL_OPEN, lr, @lr);
         end;
 
-        // darw caption
-        oBgBmp.Canvas.Brush.Style := bsClear;
-        oBgBmp.Canvas.Font.Color := TextColorGroup;
-        fs := oBgBmp.Canvas.Font.Style;
-        if not StyleServices.Enabled
-        then oBgBmp.Canvas.Font.Style := [fsBold];
+        // draw group caption
+        clr0 := SetTextColor(dc, ColorToRGB(TextColorGroup));
+        bck0 := SetBkMode(dc, TRANSPARENT);
+
         tr := vi.Rect;
         tr.Left := tr.Left + TextGroupOffset;
-        DrawText(oBgBmp.Canvas.Handle, text, -1, tr,
+        DrawText(dc, text, -1, tr,
           DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS or DT_WORD_ELLIPSIS);
-        oBgBmp.Canvas.Font.Style := fs;
+
+        SetTextColor(dc, clr0);
+        SetBkMode(dc, bck0);
+
+        SelectObject(dc, fnt0);
+        oFont.Style := fs;
       end;
       //-----------------------------------------------------------------------
       vtSeparator:
       begin
-        if (IsWindows10)
+        if IsWindows10
         then begin
           lr := Bounds(vi.Rect.Left + ItemPadding, vi.Rect.CenterPoint.Y,
             vi.Rect.Width - ItemPadding*2, ScaleDimension(1));
-          brush := CreateSolidBrush($555555);
-          FillRect(oBgBmp.Canvas.Handle, lr, brush);
-          DeleteObject(brush);
+          brh0 := SelectObject(dc, GetStockObject(DC_BRUSH));
+          clr0 := SetDCBrushColor(dc, $555555);
+          FillRect(dc, lr, GetStockObject(DC_BRUSH));
+          SetDCBrushColor(dc, clr0);
+          SelectObject(dc, brh0);
         end
         else begin
           // calc and darw separator line
           lr := Bounds(vi.Rect.Left, vi.Rect.CenterPoint.Y-1, vi.Rect.Width, ScaleDimension(1));
-          DrawThemeBackground(hLvTheme, oBgBmp.Canvas.Handle, LVP_GROUPHEADERLINE,
+          DrawThemeBackground(hLvTheme, dc, LVP_GROUPHEADERLINE,
             LVGHL_OPEN, lr, @lr);
         end;
       end;
@@ -1163,12 +1268,15 @@ end;
 
 function CheckFileDrive(const FileName: string): Boolean;
 begin
-  if (FileName.Length >= 2) and (FileName.Chars[1] = DriveDelim)
+  if (FileName.Length >= 2)
+      and (FileName.Chars[1] = DriveDelim)
   then Exit(True)
-  else if (FileName.Length >= 2)
-    and (FileName.Chars[0] = PathDelim)
-    and (FileName.Chars[1] = PathDelim)
-  then Exit(True);
+  else begin
+    if (FileName.Length >= 2)
+       and (FileName.Chars[0] = PathDelim)
+       and (FileName.Chars[1] = PathDelim)
+    then Exit(True);
+  end;
   Result := False;
 end;
 
@@ -1183,7 +1291,7 @@ begin
     if Succeeded(pFolder.GetUIObjectOf(0, 1, child, IQueryInfo, nil, pQueryInfo))
     then begin
       pTip := nil;
-      if Succeeded( pQueryInfo.GetInfoTip(QITIPF_DEFAULT, pTip) )
+      if Succeeded(pQueryInfo.GetInfoTip(QITIPF_DEFAULT, pTip))
          and (pTip <> nil)
       then begin
         StrPLCopy(AText, pTip, ASize);
@@ -1220,7 +1328,7 @@ begin
     ji.Item.QueryInterface(IID_IShellItem, pItem);
     if Assigned(pItem)
     then begin
-      if Succeeded( pItem.GetDisplayName(SIGDN_DESKTOPABSOLUTEEDITING, pTip) )
+      if Succeeded(pItem.GetDisplayName(SIGDN_DESKTOPABSOLUTEEDITING, pTip))
       then begin
         { tip: FILENAME }
         fn := pTip; CoTaskMemFree(pTip);
@@ -1235,10 +1343,10 @@ begin
       end;
 
       { get queryinfo default tip }
-      if Succeeded( pItem.BindToHandler(nil, BHID_SFUIObject, IQueryInfo, pQueryInfo) )
+      if Succeeded(pItem.BindToHandler(nil, BHID_SFUIObject, IQueryInfo, pQueryInfo))
       then begin
         pTip := nil;
-        if Failed( pQueryInfo.GetInfoTip(QITIPF_DEFAULT, pTip) )
+        if Failed(pQueryInfo.GetInfoTip(QITIPF_DEFAULT, pTip))
            or (pTip = nil)
         then Exit(False);
         StrPLCopy(AText, pTip, ASize);
@@ -1256,12 +1364,12 @@ begin
     if Assigned(pLink)
     then begin
       AText[0] := #0;
-      if Succeeded( pLink.GetDescription(AText, ASize) )
+      if Succeeded(pLink.GetDescription(AText, ASize))
          and (AText[0] <> #0)
       then Exit(True);
       { get arguments }
       args[0] := #0;
-      if Succeeded( pLink.GetArguments(args, MAX_PATH) )
+      if Succeeded(pLink.GetArguments(args, MAX_PATH))
          and (args[0] <> #0)
       then begin
         { don't use default tip for items with arguments
@@ -1311,7 +1419,7 @@ begin
     SendMessage(TipHwnd, TTM_SETMAXTIPWIDTH, 0 , 400);
 
     // Windows 7, classic themes, jumplist, tooltip have non-default margins (4,4,4,4) and font
-    if not StyleServices.Enabled
+    if (not StyleServices.Enabled)
     then begin
       m := ScaleDimension(4);
       margin := Rect(m,m,m,m);
@@ -1362,7 +1470,8 @@ begin
     then Exit;
 
     i := Index;
-    if (i = INDEX_NONE) or (i >= FVtList.Count)
+    if (i = INDEX_NONE)
+       or (i >= FVtList.Count)
     then Exit;
 
     vi := FVtList[i];
@@ -1376,7 +1485,7 @@ begin
        or (not PinSelected)
     then begin
       tip[0] := #0;
-      if not GetDescription(vi, tip, Length(tip))
+      if (not GetDescription(vi, tip, Length(tip)))
       then Exit;
       TipToolInfo.lpszText := tip;
     end
@@ -1394,7 +1503,7 @@ begin
       pt.Offset(TipPosOffset)
     end
     else begin
-      if (vi.Pinnable)
+      if vi.Pinnable
          and PinSelected
       then pt := Point(vi.Rect.Right - PinButtonWidth, vi.Rect.Bottom)
       else pt := Point(vi.Rect.Left + ItemPadding + FIconSize, vi.Rect.Bottom);
@@ -1423,7 +1532,7 @@ begin
   end;
 end;
 
-function TFormJumpList.UpdateJumpList: Boolean;
+function TFormJumpList.UpdateJumpList(const AUpdateList: Boolean = True): Boolean;
 var NeedUninitialize: Boolean;
     g, i: Integer;
     jg: TJumpGroup;
@@ -1437,230 +1546,236 @@ var NeedUninitialize: Boolean;
     ppszName: PChar;
 begin
   Result := False;
-  if GetJumplist(PChar(FAppId), FJumpList, FMaxCount)
-  then begin
-    FVtList.Clear;
-    vr := TRect.Empty;
-    // CoInitializeEx used for GetIcon
-    NeedUninitialize := SUCCEEDED(CoInitializeEx(nil, COINIT_APARTMENTTHREADED or COINIT_DISABLE_OLE1DDE));
-    try
-      for g := 0 to FJumpList.Groups.Count-1 do
-      begin
-        jg := FJumpList.Groups[g];
-        if jg.Hidden
-        then Continue;
-        // Add group
-        vi.Style := vtGroup;
-        vi.Group := g;
-        if vr.IsEmpty
-        then vr := Bounds(ItemMargin, ItemSpacing, ItemWidth, ItemHeight)
-        else vr.Offset(0, ItemHeight + ItemSpacing);
-        vi.Rect := vr;
-        FVtList.Add(vi);
 
-        for i := 0 to jg.Items.Count-1 do
-        begin
-          ji := jg.Items[i];
-          if ji.Hidden
-          then Continue;
-          // Add separator
-          if ji.eType = jiSeparator
-          then begin
-            vi.Style := vtSeparator;
-            vr.Offset(0, ItemHeight + ItemSpacing);
-            vi.Rect := vr;
-            FVtList.Add(vi);
-            Continue;
-          end;
-          // Add item
-          vi.Style := vtItem;
-          vi.Group := g;
-          vi.Item := i;
-          vi.Icon := ExtractIcon(ji.Item, ji.eType);
+  // Get Jumplist
+  if AUpdateList
+     and not GetJumplist(PChar(FAppId), FJumpList, FMaxCount)
+  then begin
+    Close;
+    Exit;
+  end;
+
+  // Prepare visual items / load icons
+  FVtList.Clear;
+  vr := TRect.Empty;
+  // CoInitializeEx used for GetIcon
+  NeedUninitialize := Succeeded(CoInitializeEx(nil, COINIT_APARTMENTTHREADED or COINIT_DISABLE_OLE1DDE));
+  try
+    for g := 0 to FJumpList.Groups.Count-1 do
+    begin
+      jg := FJumpList.Groups[g];
+      if jg.Hidden
+      then Continue;
+      // Add group
+      vi.Style := vtGroup;
+      vi.Group := g;
+      if vr.IsEmpty
+      then vr := Bounds(ItemMargin, ItemSpacing, ItemWidth, ItemHeight)
+      else vr.Offset(0, ItemHeight + ItemSpacing);
+      vi.Rect := vr;
+      FVtList.Add(vi);
+
+      for i := 0 to jg.Items.Count-1 do
+      begin
+        ji := jg.Items[i];
+        if ji.Hidden
+        then Continue;
+        // Add separator
+        if ji.eType = jiSeparator
+        then begin
+          vi.Style := vtSeparator;
           vr.Offset(0, ItemHeight + ItemSpacing);
           vi.Rect := vr;
-          vi.IsLatesPinned := (LastPinUnpinHash = ji.Hash);
-          vi.Pinnable := jg.eType <> jgTasks;
           FVtList.Add(vi);
+          Continue;
         end;
-      end;
-
-      { Add footer items }
-      if (FVtList.Count > 0)
-      then begin
-        RectBody := Bounds(0, 0, ListWidth, vr.Bottom + ItemMargin);
-        RectFooter := Bounds(0, RectBody.Bottom, ListWidth,
-          ItemSpacing + ItemMargin
-          + 1*ItemHeight + 0*ItemSpacing
-          + ItemMargin{ + 1});
-
-        { Add parent shortcut item }
-        vr.Location := Point(ItemMargin, RectFooter.Top + ItemSpacing + ItemMargin{ + 1});
-        FillChar(vi, SizeOf(vi), 0);
-        vi.Style := vtFooter;
+        // Add item
+        vi.Style := vtItem;
+        vi.Group := g;
+        vi.Item := i;
+        vi.Icon := ExtractIcon(ji.Item, ji.eType);
+        vr.Offset(0, ItemHeight + ItemSpacing);
         vi.Rect := vr;
-        vi.Icon := ICI_DEFAULT;
-        vi.Caption := '???';
-        // name & icon
-        if Succeeded( SHCreateItemFromIDList(FAppExe, IShellItem, pItem) )
-        then begin
-          vi.Icon := ExtractIcon(pItem, jiItem);
-          if Succeeded(pItem.GetDisplayName(SIGDN_PARENTRELATIVEEDITING, ppszName))
-          then begin
-            vi.Caption := ppszName;
-            CoTaskMemFree(ppszName);
-          end;
-        end;
+        vi.IsLatesPinned := (LastPinUnpinHash = ji.Hash);
+        vi.Pinnable := jg.eType <> jgTasks;
         FVtList.Add(vi);
       end;
-
-    finally
-      if NeedUninitialize
-      then CoUninitialize;
     end;
 
+    { Add footer items }
     if (FVtList.Count > 0)
     then begin
-      _FHotIndex := INDEX_NONE;
+      RectBody := Bounds(0, 0, ListWidth, vr.Bottom + ItemMargin);
+      RectFooter := Bounds(0, RectBody.Bottom, ListWidth,
+        ItemSpacing + ItemMargin
+        + 1*ItemHeight + 0*ItemSpacing
+        + ItemMargin{ + 1});
 
-      r := Rect(0, 0, ListWidth, RectFooter.Bottom);
-
-      PrepareBackground(r.Width, r.Height);
-
-      PrepareTooltips;
-
-      AdjustWindowRectEx(r, GetWindowLong(Handle, GWL_STYLE), False,
-        GetWindowLong(Handle, GWL_EXSTYLE));
-
-      L := 0;
-      T := 0;
-      W := r.Width;
-      H := r.Height;
-
-      case FAlign of
-        jaLeft: begin
-          L := FX + FormOffset;
-          T := FY - H;
-        end;
-        jaTop: begin
-          L := FX - (W div 2);
-          T := FY + FormOffset;
-        end;
-        jaRight: begin
-          L := FX - W - FormOffset;
-          T := FY - H;
-        end;
-        jaBottom: begin
-          L := FX - (W div 2);
-          T := FY - H - FormOffset;
-        end;
-      end;
-      monrect := Screen.MonitorFromPoint( Point(FX, FY) ).BoundsRect;
-      // correct lefttop
-      if (L + W) > (monrect.Right)
-      then L := monrect.Right - W;
-      L := Max(L, monrect.Left);
-
-      if (T + H) > (monrect.Bottom)
-      then T := monrect.Bottom - H;
-      T := Max(T, monrect.Top);
-      SelfBoundsRect := Bounds(L, T, W, H);
-
-      PaintForm;
-
-      { Check window animation }
-      if (not IsWindowVisible(Handle))
-         and AnimationTaskbarEnabled
+      { Add parent shortcut item }
+      vr.Location := Point(ItemMargin, RectFooter.Top + ItemSpacing + ItemMargin{ + 1});
+      FillChar(vi, SizeOf(vi), 0);
+      vi.Style := vtFooter;
+      vi.Rect := vr;
+      vi.Icon := ICI_DEFAULT;
+      vi.Caption := '???';
+      // name & icon
+      if Succeeded(SHCreateItemFromIDList(FAppExe, IShellItem, pItem))
       then begin
-        // show with blend animation
-        SetWindowPos(Handle, 0, L, T, W, H, SWP_HIDEWINDOW);
-        AnimateWindow(Handle, 100, AW_BLEND);
-      end
-      else begin
-        // show
-        SetWindowPos(Handle, 0, L, T, W, H, SWP_SHOWWINDOW);
+        vi.Icon := ExtractIcon(pItem, jiItem);
+        if Succeeded(pItem.GetDisplayName(SIGDN_PARENTRELATIVEEDITING, ppszName))
+        then begin
+          vi.Caption := ppszName;
+          CoTaskMemFree(ppszName);
+        end;
       end;
-      Invalidate;
-      Result := True;
-    end
-    else Close;
+      FVtList.Add(vi);
+    end;
+
+  finally
+    if NeedUninitialize
+    then CoUninitialize;
   end;
+
+  if (FVtList.Count > 0)
+  then begin
+    FHotIndex := INDEX_NONE;
+
+    r := Rect(0, 0, ListWidth, RectFooter.Bottom);
+
+    PrepareBackground(r.Width, r.Height);
+
+    PrepareTooltips;
+
+    AdjustWindowRectEx(r, DWORD(GetWindowLong(Handle, GWL_STYLE)), False,
+      DWORD(GetWindowLong(Handle, GWL_EXSTYLE)));
+
+    L := 0;
+    T := 0;
+    W := r.Width;
+    H := r.Height;
+
+    case FAlign of
+      saLeft: begin
+        L := FX + FormOffset;
+        T := FY - H;
+      end;
+      saTop: begin
+        L := FX - (W div 2);
+        T := FY + FormOffset;
+      end;
+      saRight: begin
+        L := FX - W - FormOffset;
+        T := FY - H;
+      end;
+      saBottom: begin
+        L := FX - (W div 2);
+        T := FY - H - FormOffset;
+      end;
+    end;
+    monrect := Screen.MonitorFromPoint( Point(FX, FY) ).BoundsRect;
+    // correct lefttop
+    if (L + W) > (monrect.Right)
+    then L := monrect.Right - W;
+    L := Max(L, monrect.Left);
+
+    if (T + H) > (monrect.Bottom)
+    then T := monrect.Bottom - H;
+    T := Max(T, monrect.Top);
+    SelfBoundsRect := Bounds(L, T, W, H);
+
+    PaintForm(oBgBmp.Dc);
+
+    { Check window animation }
+    if (not IsWindowVisible(Handle))
+       and AnimationTaskbarEnabled
+    then begin
+      // show with blend animation
+      SetWindowPos(Handle, 0, L, T, W, H, SWP_HIDEWINDOW);
+      AnimateWindow(Handle, 100, AW_BLEND);
+    end
+    else begin
+      // show
+      SetWindowPos(Handle, 0, L, T, W, H, SWP_SHOWWINDOW);
+    end;
+    Invalidate;
+
+    Exit(True);
+  end;
+
+  Close;
 end;
 
 procedure TFormJumpList.PaintWindow(DC: HDC);
 begin
-  BitBlt(DC, 0, 0, oBgBmp.Width, oBgBmp.Height,
-    oBgBmp.Canvas.Handle, 0, 0, SRCCOPY);
+  BitBlt(DC, 0, 0, oBgBmp.Width, oBgBmp.Height, oBgBmp.Dc, 0, 0, SRCCOPY);
 end;
 
-procedure TFormJumpList.PaintForm;
+procedure TFormJumpList.PaintForm(ASrcDc: HDC);
 begin
-  BitBlt(Canvas.Handle, 0, 0, oBgBmp.Width, oBgBmp.Height,
-    oBgBmp.Canvas.Handle, 0, 0, SRCCOPY);
+  BitBlt(Canvas.Handle, 0, 0, oBgBmp.Width, oBgBmp.Height, ASrcDc, 0, 0, SRCCOPY);
 end;
 
 procedure TFormJumpList.SetHotIndex(AValue: integer);
+var dc: HDC;
 begin
-  if (_FHotIndex = AValue)
+  if (FHotIndex = AValue)
   then Exit;
 
   SendMessage(TipHwnd, TTM_TRACKACTIVATE, WParam(False), LParam(@TipToolInfo));
 
+  dc := oBgBmp.Dc;
+
   // Clear previous hot item
-  if (_FHotIndex <> INDEX_NONE)
-  then DrawJumplistItem(Index, False, False);
+  if (FHotIndex <> INDEX_NONE)
+  then DrawJumplistItem(dc, Index, False, False);
 
-  _FHotIndex := AValue;
+  FHotIndex := AValue;
 
-  if (_FHotIndex <> INDEX_NONE)
+  if (FHotIndex <> INDEX_NONE)
   then begin
-    DrawJumplistItem(Index, True, PinSelected);
+    DrawJumplistItem(dc, Index, True, PinSelected);
     SetTimer(Handle, TIMER_TOOLTIP_SHOW, TipShowTime, nil);
   end;
 
-  PaintForm;
+  PaintForm(dc);
 end;
 
-function TFormJumpList.Popup(AWnd: HWND; AX, AY: Integer; AAlign: TJumplistAlign;
-  const AAppId: String; AAppExe: PItemIDList; AMaxCount: Integer): Boolean;
+function TFormJumpList.Popup(AWnd: HWND; APt: TPoint; AAlign: TScreenAlign): Boolean;
 begin
-  FAppId := AAppId;
-  FAppExe := AAppExe;
-  FMaxCount := AMaxCount;
-  FX := AX;
-  FY := AY;
-  FAlign := AAlign;
   FWnd := AWnd;
-  Result := UpdateJumpList;
+  FX := APt.X;
+  FY := APt.Y;
+  FAlign := AAlign;
+  Result := UpdateJumpList(False);
   // Get current monitor rect
-  TipMonitorRect := Screen.MonitorFromPoint(Point(AX, AY)).BoundsRect;
+  TipMonitorRect := Screen.MonitorFromPoint(APt).BoundsRect;
 end;
 
 procedure TFormJumpList.OnJumpListPin(Sender: TObject);
 var g, i: Integer;
 begin
-  g := HiWord(FJumpItemIndex);
-  i := WORD(FJumpItemIndex);
+  g := FVtList[Index].Group;
+  i := FVtList[Index].Item;
   LastPinUnpinHash := FJumpList.Groups[g].Items[i].Hash;
-  PinJumpItem(PChar(FAppId), FJumpList, g, i, True);
+  PinJumpItem(PChar(FAppId), FJumpList, g, i, True, -1); // -1 - pin to the end
   UpdateJumpList;
 end;
 
 procedure TFormJumpList.OnJumpListUnPin(Sender: TObject);
 var g, i: Integer;
 begin
-  g := HiWord(FJumpItemIndex);
-  i := WORD(FJumpItemIndex);
+  g := FVtList[Index].Group;
+  i := FVtList[Index].Item;
   LastPinUnpinHash := FJumpList.Groups[g].Items[i].Hash;
-  PinJumpItem(PChar(FAppId), FJumpList, g, i, False);
+  PinJumpItem(PChar(FAppId), FJumpList, g, i, False, 0); // 0 - unused parameter
   UpdateJumpList;
 end;
 
 procedure TFormJumpList.OnJumpListRemove(Sender: TObject);
 var g, i: Integer;
 begin
-  g := HiWord(FJumpItemIndex);
-  i := WORD(FJumpItemIndex);
+  g := FVtList[Index].Group;
+  i := FVtList[Index].Item;
   RemoveJumpItem(PChar(FAppId), FJumpList, g, i);
   UpdateJumpList;
 end;
@@ -1668,12 +1783,12 @@ end;
 procedure TFormJumpList.OnJumpListExecute(Sender: TObject);
 var g, i: Integer;
 begin
-  g := HiWord(FJumpItemIndex);
-  i := WORD(FJumpItemIndex);
+  g := FVtList[Index].Group;
+  i := FVtList[Index].Item;
   // Some Execute close inactive windows (e.g. Steam client)
   // and our window did not receive the message WM_KILLFOCUS
   AlphaBlendAndClose;
-  ExecuteJumpItem(PChar(FAppId), FAppExe, FJumpList.Groups[g].Items[i]{, FWnd});
+  ExecuteJumpItem(FJumpList.Groups[g].Items[i], Handle);
 end;
 
 procedure TFormJumpList.JumpListPopupMenuPopup(const X, Y: Integer);
@@ -1696,7 +1811,7 @@ begin
   mi.Caption := cLineCaption;
   FPopupMenu.Items.Add(mi);
 
-  g := HiWord(FJumpItemIndex);
+  g := FVtList.Items[Index].Group;
   case FJumpList.Groups[g].eType of
     jgPinned:
       begin
@@ -1721,6 +1836,7 @@ begin
       end;
     else;
   end;
+
   FPopupMenu.Items.RethinkHotkeys;
   FPopupMenuVisible := True;
   FPopupMenu.Popup(X, Y);

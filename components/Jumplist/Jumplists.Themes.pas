@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Jumplists.Themes;
@@ -10,94 +10,145 @@ unit Jumplists.Themes;
 interface
 
 uses
-  Windows, Vcl.Graphics, System.Classes;
+  Winapi.Windows;
 
 const
-  { Linkbar jumplist background part id }
-  LBJL_BGPID_BODY   = 0;
-  LBJL_BGPID_FOOTER = 1;
+  { Linkbar Jumplist PartId }
+  LB_JLP_BODY          = 0;     // Body background
+  LB_JLP_FOOTER        = 1;     // Footer background
+  LB_JLP_BUTTON_LEFT   = 2;     // Left part of split button
+  LB_JLP_BUTTON        = 3;     // Full Button
+//LB_JLP_BUTTON_CENTER = 4;     // Middle part of split button
+  LB_JLP_BUTTON_RIGHT  = 4;     // Right part of split button
+  LB_JLP_FOOTER_BUTTON = 5;     // Footer button (equal Full Button)
+  LB_JLP_COUNT         = 6;
 
-  { Linkbar jumplist item part id }
-  LBJL_ITPID_BTN     = 0;
-  LBJL_ITPID_BTN_LFT = 1;
-  LBJL_ITPID_PIN     = 2;
-  LBJL_ITPID_FOOT    = 3;
+  LB_JLP_PIN_BUTTON = LB_JLP_BUTTON_RIGHT;     // Pin button
 
-  { Linkbar jumplist item state id }
-  LBJL_ITSID_NORMAL   = 0;
-  LBJL_ITSID_HOT      = 1;
-  LBJL_ITSID_SELECTED = 2;
-  LBJL_ITSID_NEW      = 3;
+  { Linkbar Jumplist PartId }
+//LB_JLS_NORMAL        = 0;
+  LB_JLS_HOT           = 0;
+  LB_JLS_PRESSED       = 1;
+  LB_JLS_SELECTED      = 2;
+  LB_JLS_NEW           = 3;
+  LB_JLS_COUNT         = 4;
 
   procedure ThemeJlInit;
   procedure ThemeJlDeinit;
-
-  procedure ThemeJlDrawBackground(const AHdc: HDC; const APart: Integer;
-    const AFullRect, AClipRect: TRect);
-
-  procedure ThemeJlDrawButton(const AHdc: HDC; const APart, AState: Integer;
-    const ABtnRect: TRect);
-
+  procedure ThemeJlDrawBackground(const AHdc: HDC; const APart: Integer; const AFullRect, AClipRect: TRect);
+  procedure ThemeJlDrawButton(const AHdc: HDC; const APart, AState: Integer; const ABtnRect: TRect);
 
 implementation
 
-uses Vcl.Themes, Winapi.UxTheme, Winapi.ShlObj, Linkbar.OS;
+uses Vcl.Themes, Winapi.UxTheme, Linkbar.OS;
 
 const
-  { Jumplists background PartId }
-  JLP_JUMPLIST_BODY   = 12;                                                     { Body }
-  JLP_JUMPLIST_FOOTER = 13;                                                     { Footer }
+  { OS type }
+  LB_OST_W7    = 0;
+  LB_OST_W8    = 1;
+  LB_OST_W81   = 2;
+  LB_OST_COUNT = 3;
 
-  { Jumplists splitbutton PartId for Windows 7 }
-  JLBP_W7_JUMPLIST_SPLITBUTTON_LEFT   = 28;                                     { Left }
-  JLBP_W7_JUMPLIST_BUTTON             = 29;                                     { Button }
-  JLBP_W7_JUMPLIST_SPLITBUTTON_CENTER = 30;                                     { Center }
-  JLBP_W7_JUMPLIST_SPLITBUTTON_RIGHT  = 31;                                     { Right }
+  { Jumplist parts (different for 7/8/8.1) }
+  // Windows 7
+  JLP7_BODY           = 12;
+  JLP7_FOOTER         = 13;
+  JLP7_BUTTON_LEFT    = 28;
+  JLP7_BUTTON         = 29;
+  JLP7_BUTTON_CENTER  = 30;
+  JLP7_BUTTON_RIGHT   = 31;
+  // Windows8
+  JLP8_BODY           = 12;
+  JLP8_FOOTER         = 13;
+  JLP8_BUTTON_LEFT    = 32;
+  JLP8_BUTTON         = 33;
+  JLP8_BUTTON_CENTER  = 34;
+  JLP8_BUTTON_RIGHT   = 35;
+  // Windows 8.1
+  JLP81_BODY          = 3;
+  JLP81_FOOTER        = 4;
+  JLP81_BUTTON_LEFT   = 10;
+  JLP81_BUTTON        = 11;
+  JLP81_BUTTON_CENTER = 11;
+  JLP81_BUTTON_RIGHT  = 12;
 
-  { Jumplists splitbutton PartId for Windows 8, 8.1 }
-  JLBP_W8_JUMPLIST_SPLITBUTTON_LEFT   = 32;                                     { Left }
-  JLBP_W8_JUMPLIST_BUTTON             = 33;                                     { Button }
-  JLBP_W8_JUMPLIST_SPLITBUTTON_CENTER = 34;                                     { Center }
-  JLBP_W8_JUMPLIST_SPLITBUTTON_RIGHT  = 35;                                     { Right }
+  { Jumplist states }
+  JLS_NORMAL   = 0;
+  JLS_HOT      = 1;
+  JLS_PRESSED  = 2;
+  JLS_SELECTED = 3;
+  JLS_NEW      = 4;
 
-  { Jumplists splitbutton StateId for Windows 7, 8, 8.1 }
-  JLBS_HOT      = 0;                                                            { Hot }
-  JLBS_UNK1     = 1;                                                            { Unknown_1 }
-  JLBS_PRESSED  = 2;                                                            { Pressed }
-  JLBS_SELECTED = 3;                                                            { Selected }
-  JLBS_NEW      = 4;                                                            { New }
-  JLBS_UNK2     = 5;                                                            { Unknown_2 }
+  { Jumplist HTHEME PartId }
+  JL_HTHEME_PID: array[0..LB_OST_COUNT-1, 0..LB_JLP_COUNT-1] of Integer = (
+    // Windows 7
+    (JLP7_BODY, JLP7_FOOTER, JLP7_BUTTON_LEFT, JLP7_BUTTON, {JLP7_BUTTON_CENTER,} JLP7_BUTTON_RIGHT, JLP7_BUTTON),
+    // Windows 8
+    (JLP8_BODY, JLP8_FOOTER, JLP8_BUTTON_LEFT, JLP8_BUTTON, {JLP8_BUTTON_CENTER,} JLP8_BUTTON_RIGHT, JLP8_BUTTON),
+    // Windows 8.1
+    (JLP81_BODY, JLP81_FOOTER, JLP81_BUTTON_LEFT, JLP81_BUTTON, {JLP81_BUTTON_CENTER,} JLP81_BUTTON_RIGHT, JLP81_BUTTON) );
 
-  { Jumplists colors for Windows 10 }
-  JLIC_W10_NORMAL   : Cardinal = $2b2b2b;
+  { Jumplist HTHEME StateId for Buttons }
+  JL_HTHEME_SID: array[0..LB_JLS_COUNT-1] of Integer =
+    ({-1, }JLS_NORMAL, JLS_PRESSED, JLS_SELECTED, JLS_NEW);
+
+  { Jumplist colors for Windows 10 }
+  // Style 1
+  JLIC_W10_NORMAL   : Cardinal = $1b1b1b;//$2b2b2b;
   JLIC_W10_HOT      : Cardinal = $404040;
   JLIC_W10_SELECTED : Cardinal = $535353;
   JLIC_W10_NEW      : Cardinal = $83e2fe;
+  { Style 2
+  JLIC_W10_BODY     : Cardinal = $000000;
+  JLIC_W10_FOOTER   : Cardinal = $2b2b2b;
+  JLIC_W10_BTN_HOT  : Cardinal = $191919;
+  JLIC_W10_PIN_HOT  : Cardinal = $2b2b2b;
+  JLIC_W10_FOT_HOT  : Cardinal = $404040;
+  JLIC_W10_NEW      : Cardinal = $83e2fe; {}
 
 var
   hJlTheme: HTHEME;
+  osIndex: Integer;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Draw background
 ////////////////////////////////////////////////////////////////////////////////
 
+{ Style 1 }
 procedure Win10_DrawJlBackground(const AHdc: HDC; const APart: Integer;
   const AFullRect, AClipRect: TRect);
 var color: COLORREF;
-    brush: HBRUSH;
+    brh0: HBRUSH;
 begin
-  if (APart = LBJL_BGPID_BODY)
+  if (APart = LB_JLP_BODY)
   then color := JLIC_W10_NORMAL
   else color := JLIC_W10_HOT;
-  brush := CreateSolidBrush(color);
-  FillRect(AHdc, AClipRect, brush);
-  DeleteObject(brush);
-end;
+
+  brh0 := SelectObject(AHdc, GetStockObject(DC_BRUSH));
+  SetDCBrushColor(AHdc, color);
+  FillRect(AHdc, AClipRect, GetStockObject(DC_BRUSH));
+  SelectObject(AHdc, brh0);
+end; {}
+
+{$REGION ' Win10_DrawJlBackground #2 '}
+{ Style 2
+procedure Win10_DrawJlBackground(const AHdc: HDC; const APart: Integer;
+  const AFullRect, AClipRect: TRect);
+var color: COLORREF;
+begin
+  if (APart = LB_JLP_BODY)
+  then color := JLIC_W10_BODY
+  else color := JLIC_W10_FOOTER;
+  brh0 := SelectObject(AHdc, GetStockObject(DC_BRUSH));
+  SetDCBrushColor(AHdc, color);
+  FillRect(AHdc, AClipRect, GetStockObject(DC_BRUSH));
+  SelectObject(AHdc, brh0);
+end; {}
+{$ENDREGION}
 
 procedure Win78_DrawJlBackground(const AHdc: HDC; const APart: Integer;
   const AFullRect, AClipRect: TRect);
 var cr: TRect;
-    brush: HBRUSH;
 begin
   if (StyleServices.Enabled)
   then begin
@@ -108,15 +159,11 @@ begin
   then begin
     // For Windows 7 (Aero), 8, 8.1
     cr := AClipRect;
-    if (APart = LBJL_BGPID_BODY)
-    then DrawThemeBackground(hJlTheme, AHdc, JLP_JUMPLIST_BODY,   0, AFullRect, @cr)
-    else DrawThemeBackground(hJlTheme, AHdc, JLP_JUMPLIST_FOOTER, 0, AFullRect, @cr);
+    DrawThemeBackground(hJlTheme, AHdc, JL_HTHEME_PID[osIndex, APart], 0, AFullRect, @cr)
   end
   else begin
     // For Windows 7 (98)
-    brush := GetSysColorBrush(COLOR_MENU);
-    FillRect(AHdc, AClipRect, brush);
-    // DeleteObject(brush); System color brushes are owned by the system
+    FillRect(AHdc, AClipRect, GetSysColorBrush(COLOR_MENU));
   end;
 end;
 
@@ -132,6 +179,43 @@ end;
 // Draw button
 ////////////////////////////////////////////////////////////////////////////////
 
+{ Style 1 }
+procedure Win10_DrawJlButton(const AHdc: HDC; const APart, AState: Integer;
+  const ABtnRect: TRect);
+var color: COLORREF;
+    brh0: HBRUSH;
+begin
+  case APart of
+    LB_JLP_BUTTON, LB_JLP_BUTTON_LEFT:
+      begin
+        case AState of
+        //LB_JLS_NORMAL:   color := JLIC_W10_NORMAL;
+          LB_JLS_HOT:      color := JLIC_W10_HOT;
+          LB_JLS_SELECTED: color := JLIC_W10_HOT;
+          LB_JLS_NEW:      color := JLIC_W10_NEW;
+          else Exit;
+        end;
+      end;
+    LB_JLP_PIN_BUTTON, LB_JLP_FOOTER_BUTTON:
+      begin
+        case AState of
+        //LB_JLS_NORMAL:   color := JLIC_W10_NORMAL;
+          LB_JLS_HOT:      color := JLIC_W10_HOT;
+          LB_JLS_SELECTED: color := JLIC_W10_SELECTED;
+          else Exit;
+        end;
+      end;
+    else Exit;
+  end;
+
+  brh0 := SelectObject(AHdc, GetStockObject(DC_BRUSH));
+  SetDCBrushColor(AHdc, color);
+  FillRect(AHdc, ABtnRect, GetStockObject(DC_BRUSH));
+  SelectObject(AHdc, brh0);
+end; {}
+
+{$REGION ' Win10_DrawJlButton #2 '}
+{ Style 2
 procedure Win10_DrawJlButton(const AHdc: HDC; const APart, AState: Integer;
   const ABtnRect: TRect);
 var color: COLORREF;
@@ -141,19 +225,27 @@ begin
     LBJL_ITPID_BTN, LBJL_ITPID_BTN_LFT:
       begin
         case AState of
-          LBJL_ITSID_NORMAL:   color := JLIC_W10_NORMAL;
-          LBJL_ITSID_HOT:      color := JLIC_W10_HOT;
-          LBJL_ITSID_SELECTED: color := JLIC_W10_HOT;
+          LBJL_ITSID_NORMAL:   color := JLIC_W10_BODY;
+          LBJL_ITSID_HOT:      color := JLIC_W10_BTN_HOT;
+          LBJL_ITSID_SELECTED: color := JLIC_W10_BTN_HOT;
           LBJL_ITSID_NEW:      color := JLIC_W10_NEW;
           else Exit;
         end;
       end;
-    LBJL_ITPID_PIN, LBJL_ITPID_FOOT:
+    LBJL_ITPID_FOOT:
       begin
         case AState of
-          LBJL_ITSID_NORMAL:   color := JLIC_W10_NORMAL;
-          LBJL_ITSID_HOT:      color := JLIC_W10_HOT;
-          LBJL_ITSID_SELECTED: color := JLIC_W10_SELECTED;
+          LBJL_ITSID_NORMAL:   color := JLIC_W10_FOOTER;
+          LBJL_ITSID_SELECTED: color := JLIC_W10_FOT_HOT;
+          else Exit;
+        end;
+      end;
+    LBJL_ITPID_PIN:
+      begin
+        case AState of
+          LBJL_ITSID_NORMAL:   color := JLIC_W10_BODY;
+          LBJL_ITSID_HOT:      color := JLIC_W10_BTN_HOT;
+          LBJL_ITSID_SELECTED: color := JLIC_W10_PIN_HOT;
           else Exit;
         end;
       end;
@@ -163,64 +255,52 @@ begin
   brush := CreateSolidBrush(color);
   FillRect(AHdc, ABtnRect, brush);
   DeleteObject(brush);
-end;
+end; {}
+{$ENDREGION}
 
 procedure Win78_DrawJlButton(const AHdc: HDC; const APart, AState: Integer;
   const ABtnRect: TRect);
 var part, state: Integer;
-    pen: HPEN;
+    pen0: HPEN;
+    brh0: HBRUSH;
 begin
   if (StyleServices.Enabled)
   then begin
-    case APart of
-      LBJL_ITPID_BTN, LBJL_ITPID_FOOT:
-        if (IsWindows7)
-        then part := JLBP_W7_JUMPLIST_BUTTON
-        else part := JLBP_W8_JUMPLIST_BUTTON;
-      LBJL_ITPID_BTN_LFT:
-        if (IsWindows7)
-        then part := JLBP_W7_JUMPLIST_SPLITBUTTON_LEFT
-        else part := JLBP_W8_JUMPLIST_SPLITBUTTON_LEFT;
-      LBJL_ITPID_PIN:
-        if (IsWindows7)
-        then part := JLBP_W7_JUMPLIST_SPLITBUTTON_RIGHT
-        else part := JLBP_W8_JUMPLIST_SPLITBUTTON_RIGHT;
-      else Exit;
-    end;
+    //if (AState = LB_JLS_NORMAL)
+    //then Exit; // normal state empty
 
-    case AState of
-      LBJL_ITSID_NORMAL:   Exit;  // normal state empty
-      LBJL_ITSID_HOT:      state := JLBS_HOT;
-      LBJL_ITSID_SELECTED: state := JLBS_SELECTED;
-      LBJL_ITSID_NEW:      state := JLBS_NEW;
-      else Exit;
-    end;
-
-    // Pin button always draw in selected state
-    if (APart = LBJL_ITPID_PIN) then state := JLBS_SELECTED;
+    part := JL_HTHEME_PID[osIndex, APart];
+    if (APart = LB_JLP_PIN_BUTTON)
+    then state := JL_HTHEME_SID[LB_JLS_SELECTED]
+    else state := JL_HTHEME_SID[AState];
 
     DrawThemeBackground(hJlTheme, AHdc, part, state, ABtnRect, nil);
   end
   else begin
     case APart of
-      LBJL_ITPID_BTN, LBJL_ITPID_BTN_LFT, LBJL_ITPID_FOOT:
+      LB_JLP_BUTTON, LB_JLP_BUTTON_LEFT, LB_JLP_FOOTER_BUTTON:
       begin
         case AState of
-          LBJL_ITSID_HOT, LBJL_ITSID_SELECTED:
-            FillRect(AHdc, ABtnRect, GetSysColorBrush(COLOR_MENUHILIGHT));
-          LBJL_ITSID_NEW:
+          LB_JLS_HOT, LB_JLS_SELECTED:
+            FillRect(AHdc, ABtnRect, GetSysColorBrush(COLOR_HIGHLIGHT));
+          LB_JLS_NEW:
             FillRect(AHdc, ABtnRect, GetSysColorBrush(COLOR_INFOBK));
           else Exit;
         end;
       end;
-      LBJL_ITPID_PIN:
+      LB_JLP_PIN_BUTTON:
       begin
-        if (AState in [LBJL_ITSID_HOT, LBJL_ITSID_SELECTED])
+        if (AState in [LB_JLS_HOT, LB_JLS_SELECTED])
         then begin
-          FillRect(AHdc, ABtnRect, GetSysColorBrush(COLOR_MENUHILIGHT));
-          pen := CreatePen(PS_SOLID, 1, GetSysColor(COLOR_WINDOWFRAME));
-          SelectObject(AHdc, pen);
+          pen0 := SelectObject(AHdc, GetStockObject(DC_PEN));
+          brh0 := SelectObject(AHdc, GetStockObject(DC_BRUSH));
+
+          SetDCPenColor(AHdc, GetSysColor(COLOR_WINDOWFRAME));
+          SetDCBrushColor(AHdc, GetSysColor(COLOR_HIGHLIGHT));
           Rectangle(AHdc, ABtnRect.Left, ABtnRect.Top, ABtnRect.Right, ABtnRect.Bottom);
+
+          SelectObject(AHdc, brh0);
+          SelectObject(AHdc, pen0);
         end;
       end
       else Exit;
@@ -229,7 +309,7 @@ begin
 end;
 
 procedure ThemeJlDrawButton(const AHdc: HDC; const APart, AState: Integer;
-    const ABtnRect: TRect);
+  const ABtnRect: TRect);
 begin
   if (IsWindows10)
   then Win10_DrawJlButton(AHdc, APart, AState, ABtnRect)
@@ -240,8 +320,18 @@ end;
 // Theme init/deinit
 ////////////////////////////////////////////////////////////////////////////////
 
+function GetOsIndex(): Integer; inline; // [0 - Windows7, 1 - Windows8, 2 - Windows8.1]
+begin
+  if IsWindows7
+  then Result := LB_OST_W7
+  else if IsWindows8
+       then Result := LB_OST_W8
+       else Result := LB_OST_W81;
+end;
+
 procedure ThemeJlInit;
 begin
+  osIndex := GetOsIndex();
 end;
 
 procedure ThemeJlDeinit;

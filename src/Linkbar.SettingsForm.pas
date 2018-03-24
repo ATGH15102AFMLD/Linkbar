@@ -1,18 +1,19 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
-unit Linkbar.Settings;
+unit Linkbar.SettingsForm;
 
 {$i linkbar.inc}
 
 interface
 
 uses
-  Windows, SysUtils, Classes, Forms, StdCtrls, NewSpin, ExtCtrls, Controls, mUnit,
-  Vcl.ComCtrls, Winapi.Messages, Vcl.Buttons, ColorPicker, VCLTee.TeCanvas,
-  Vcl.Menus, HotKey;
+  System.SysUtils, System.Classes,
+  Winapi.Windows, Winapi.Messages,
+  Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Buttons, Vcl.Controls, Vcl.ComCtrls, Vcl.Menus,
+  NewSpin, mUnit, ColorPicker, HotKey;
 
 type
   TFrmProperties = class(TForm)
@@ -23,8 +24,8 @@ type
     lblIconSize: TLabel;
     lblMargin: TLabel;
     lblOrder: TLabel;
-    Label6: TLabel;
-    Label1: TLabel;
+    lblTextWidthIdent: TLabel;
+    lblTextPosition: TLabel;
     cbbTextLayout: TComboBox;
     chbAutoHide: TCheckBox;
     lblVer: TLabel;
@@ -58,22 +59,17 @@ type
     pnlDummy7: TPanel;
     lbl2: TLabel;
     tsAdditionally: TTabSheet;
-    lblSectionWin8: TLabel;
-    lblSectionWin7: TLabel;
     lblLocalizer: TLabel;
-    chbShowHints: TCheckBox;
-    chbLightStyle: TCheckBox;
-    chbAeroGlass: TCheckBox;
     lblSysInfo: TLabel;
     pnlDelay: TPanel;
     lblDelay: TLabel;
     nseAutoShowDelay: TnSpinEdit;
     pnlDummy10: TPanel;
-    btnBgColorShowHide: TSpeedButton;
+    btnBkgndColorEdit: TSpeedButton;
     pnlDummy11: TPanel;
-    edtColorBg: TEdit;
-    chbUseBkgColor: TCheckBox;
-    chbUseTxtColor: TCheckBox;
+    edtBkgndColor: TEdit;
+    chbUseBkgndColor: TCheckBox;
+    chbUseTextColor: TCheckBox;
     bvlSpacer2: TBevel;
     bvlSpacer3: TBevel;
     pnlDummy12: TPanel;
@@ -83,16 +79,34 @@ type
     pmSysInfo: TPopupMenu;
     imCopy: TMenuItem;
     pnlLightStyle: TPanel;
+    chbLightStyle: TCheckBox;
+    lblSectionAdditional: TLabel;
+    chbAeroGlass: TCheckBox;
+    chbShowHints: TCheckBox;
     pnlHotkey: TPanel;
     lblHotKey: TLabel;
-    pnlHotkeyEdit: TPanel;
     tsAutohide: TTabSheet;
     pnlJumplistShowMode: TPanel;
     lblJumplistShowMode: TLabel;
     cbbJumplistShowMode: TComboBox;
-    lblJumplist: TLabel;
+    lblSectionJumplist: TLabel;
     pnlDummy13: TPanel;
     chbStayOnTop: TCheckBox;
+    pnlJumplistRecentMax: TPanel;
+    lblJumplistRecentMax: TLabel;
+    nseJumplistRecentMax: TnSpinEdit;
+    pnlDummy21: TPanel;
+    Bevel1: TBevel;
+    pnlLook: TPanel;
+    lblLook: TLabel;
+    cbbLook: TComboBox;
+    pnlCornerGapWidth: TPanel;
+    lblCornerGapWidth: TLabel;
+    Bevel2: TBevel;
+    nseCorner1GapWidth: TnSpinEdit;
+    nseCorner2GapWidth: TnSpinEdit;
+    lblGithub: TLabel;
+    linkGithub: TLinkLabel;
     procedure FormMouseWheel(Sender: TObject; Shift: TShiftState;
       WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
     procedure linkEmailLinkClick(Sender: TObject; const Link: string;
@@ -106,8 +120,8 @@ type
     procedure btnCancelClick(Sender: TObject);
     procedure btnBgColorClick(Sender: TObject);
     procedure SpeedButton2Click(Sender: TObject);
-    procedure edtColorBgKeyPress(Sender: TObject; var Key: Char);
-    procedure edtColorBgChange(Sender: TObject);
+    procedure edtBkgndColorKeyPress(Sender: TObject; var Key: Char);
+    procedure edtBkgndColorChange(Sender: TObject);
     procedure imCopyClick(Sender: TObject);
   protected
     procedure CreateParams(var Params: TCreateParams); override;
@@ -137,8 +151,8 @@ implementation
 {$R *.dfm}
 
 uses
-  Math, Graphics, Linkbar.Consts, Linkbar.OS, Linkbar.Shell, Linkbar.Themes,
-  Linkbar.L10n, Linkbar.Common, Vcl.Clipbrd;
+  Math, Graphics, Vcl.Clipbrd,
+  Linkbar.Consts, Linkbar.OS, Linkbar.Shell, Linkbar.Themes, Linkbar.L10n, Linkbar.Common;
 
 function TFrmProperties.ScaleDimension(const X: Integer): Integer;
 begin
@@ -150,8 +164,8 @@ begin
   nseIconSize.Value := StrToIntDef(TSpeedButton(Sender).Caption, nseIconSize.Value);
 end;
 
+{ Prevent window resizing }
 procedure TFrmProperties.WMNCHitTest(var Message: TWMNCHitTest);
-// Disable window resize
 begin
   inherited;
   PreventSizing(Message.Result);
@@ -164,9 +178,8 @@ begin
 end;
 
 constructor TFrmProperties.Create(AOwner: TLinkbarWcl);
-var
-  maxlabelwidth, ctrlwidth, y1: integer;
-  VO1, VO2, VO3: Integer;
+var maxlabelwidth, ctrlwidth, y1: integer;
+    VO1, VO2, VO3: Integer;
 begin
   FCanChanged := False;
 
@@ -176,8 +189,8 @@ begin
   Font.Name := Screen.MenuFont.Name;
 
   // Create editors
-  edtHotKey := THotKeyEdit.Create(pnlHotkeyEdit);
-  edtHotKey.Parent := pnlHotkeyEdit;
+  edtHotKey := THotKeyEdit.Create(pnlHotkey);
+  edtHotKey.Parent := pnlHotkey;
   edtHotKey.Align := alClient;
   edtHotKey.OnChange := Changed;
   FColorPicker := TfrmColorPicker.Create(Self);
@@ -198,10 +211,11 @@ begin
   maxlabelwidth := Max(maxlabelwidth, lblIconSize.Width);
   maxlabelwidth := Max(maxlabelwidth, lblMargin.Width);
   maxlabelwidth := Max(maxlabelwidth, lblOrder.Width);
-  maxlabelwidth := Max(maxlabelwidth, Label1.Width);
-  maxlabelwidth := Max(maxlabelwidth, Label6.Width);
+  maxlabelwidth := Max(maxlabelwidth, lblTextPosition.Width);
+  maxlabelwidth := Max(maxlabelwidth, lblTextWidthIdent.Width);
+  maxlabelwidth := Max(maxlabelwidth, lblCornerGapWidth.Width);
   maxlabelwidth := Max(maxlabelwidth, ScaleDimension(180));
-  maxlabelwidth := maxlabelwidth + ScaleDimension(10);
+  maxlabelwidth := maxlabelwidth + ScaleDimension(16);
   ctrlwidth := cbbScreenPosition.Width;
 
   GetTitleFont(lblSection1.Font);
@@ -275,8 +289,6 @@ begin
   // Page AutoHide
   // ---------------------------------------------------------------------------
 
-  //lblSection2.Top := pnlDummy12.BoundsRect.Bottom + VO1*2;
-
   pnlDummy7.Top := lblSection2.BoundsRect.Bottom + VO1;
   pnlDummy7.Height := pnlDummy1.Height;
 
@@ -286,26 +298,44 @@ begin
   pnlDelay.Top := pnlDummy8.BoundsRect.Bottom + VO1;
   pnlDelay.Height := pnlDummy1.Height;
 
-  pnlHotkey.Top := pnlDelay.BoundsRect.Bottom + VO1;
+  pnlCornerGapWidth.Top := pnlDelay.BoundsRect.Bottom + VO1;
+  pnlCornerGapWidth.Height := pnlDummy1.Height;
+  nseCorner1GapWidth.MinValue := CORNER_GAP_WIDTH_MIN;
+  nseCorner1GapWidth.MaxValue := CORNER_GAP_WIDTH_MAX;
+  nseCorner2GapWidth.MinValue := CORNER_GAP_WIDTH_MIN;
+  nseCorner2GapWidth.MaxValue := CORNER_GAP_WIDTH_MAX;
+
+  pnlHotkey.Top := pnlCornerGapWidth.BoundsRect.Bottom + VO1;
   pnlHotkey.Height := pnlDummy1.Height;
 
-  pnlHotkeyEdit.Top := pnlHotkey.BoundsRect.Bottom + VO1;
-  pnlHotkeyEdit.Height := pnlDummy1.Height;
-
-  chbAutoHideTransparency.Top := pnlHotkeyEdit.BoundsRect.Bottom + VO3;
+  chbAutoHideTransparency.Top := pnlHotkey.BoundsRect.Bottom + VO3;
 
   // ---------------------------------------------------------------------------
   // Page Additionally
   // ---------------------------------------------------------------------------
-  lblJumplist.Font := lblSection1.Font;
-  pnlJumplistShowMode.Top := lblJumplist.BoundsRect.Bottom + VO1;
+  lblSectionJumplist.Font := lblSection1.Font;
+  pnlJumplistShowMode.Top := lblSectionJumplist.BoundsRect.Bottom + VO1;
   pnlJumplistShowMode.Height := pnlDummy1.Height;
-  lblSectionWin7.Font := lblSection1.Font;
-  lblSectionWin7.Top := pnlJumplistShowMode.BoundsRect.Bottom + VO1*2;
-  pnlLightStyle.Top := lblSectionWin7.BoundsRect.Bottom + VO1;
-  lblSectionWin8.Font := lblSection1.Font;
-  lblSectionWin8.Top := pnlLightStyle.BoundsRect.Bottom + VO1*2;
-  chbAeroGlass.Top := lblSectionWin8.BoundsRect.Bottom + VO1;
+  pnlJumplistRecentMax.Top := pnlJumplistShowMode.BoundsRect.Bottom + VO1;
+  pnlJumplistRecentMax.Height := (pnlDummy1.Height * 3) div 2;
+  nseJumplistRecentMax.Top := (pnlDummy21.Height - nseJumplistRecentMax.Height) div 2;
+  nseJumplistRecentMax.MinValue := JUMPLIST_RECENTMAX_MIN;
+  nseJumplistRecentMax.MaxValue := JUMPLIST_RECENTMAX_MAX;
+
+  { OS-dependent options }
+  lblSectionAdditional.Font := lblSection1.Font;
+  lblSectionAdditional.Top := pnlJumplistRecentMax.BoundsRect.Bottom + VO1*2;
+  // Windows 7
+  pnlLightStyle.Visible := IsWindows7;
+  pnlLightStyle.Top := lblSectionAdditional.BoundsRect.Bottom + VO1;
+  pnlLightStyle.Height := (pnlDummy1.Height * 3) div 2;
+  // Windows 8/8.1
+  chbAeroGlass.Visible := IsWindows8And8Dot1;
+  chbAeroGlass.Top := lblSectionAdditional.BoundsRect.Bottom + VO1;
+  // Windows 10s
+  pnlLook.Visible := IsWindows10;
+  pnlLook.Top := lblSectionAdditional.BoundsRect.Bottom + VO1;
+  pnlLook.Height := pnlDummy1.Height;
 
   pgc1.Height := tsView.Top + pnlDummy13.BoundsRect.Bottom
     + VO2 + tsView.Left;
@@ -321,6 +351,7 @@ begin
 
   linkWeb.Left := lblWeb.BoundsRect.Right + ScaleDimension(8);
   linkEmail.Left := lblEmail.BoundsRect.Right + ScaleDimension(8);
+  linkGithub.Left := lblGithub.BoundsRect.Right + ScaleDimension(8);
 
   // Set values
   cbbScreenPosition.ItemIndex := Ord(FLinkbar.ScreenAlign);
@@ -331,29 +362,26 @@ begin
   cbbAutoShowMode.ItemIndex := Ord(FLinkbar.AutoShowMode);
   nseAutoShowDelay.Value := FLinkbar.AutoShowDelay;
   chbLightStyle.Checked := FLinkbar.IsLightStyle;
-  chbUseBkgColor.Checked := FLinkbar.UseBkgColor;
-  chbUseTxtColor.Checked := FLinkbar.UseTxtColor;
+  chbUseBkgndColor.Checked := FLinkbar.UseBkgndColor;
+  chbUseTextColor.Checked := FLinkbar.UseTextColor;
   cbbJumplistShowMode.ItemIndex := Ord(FLinkbar.JumplistShowMode);
+  nseJumplistRecentMax.Value := FLinkbar.JumplistRecentMax;
   chbStayOnTop.Checked := FLinkbar.StayOnTop;
+  cbbLook.ItemIndex := Ord(FLinkbar.LookMode);
+  nseCorner1GapWidth.Value := FLinkbar.Corner1GapWidth;
+  nseCorner2GapWidth.Value := FLinkbar.Corner2GapWidth;
 
   edtHotKey.HotkeyInfo := FLinkbar.HotkeyInfo;
 
-  BackgroundColor := FLinkbar.BkgColor;
-  TextColor := FLinkbar.TxtColor;
+  BackgroundColor := FLinkbar.BackgroundColor;
+  TextColor := FLinkbar.TextColor;
 
   chbAeroGlass.Checked := FLinkbar.EnableAeroGlass;
 
-  { Disable OS-dependent options }
-  // Windows 7
-  lblSectionWin7.Enabled := IsWindows7;
-  chbLightStyle.Enabled := IsWindows7;
-  // Windows 8, 8.1
-  lblSectionWin8.Enabled := IsWindows8And8Dot1;
-  chbAeroGlass.Enabled := IsWindows8And8Dot1;
-
-  lblVer.Caption    := Format(lblVer.Caption, [VersionToString]);
-  linkWeb.Caption   := '<a>' + URL_WEB + '</a>';
-  linkEmail.Caption := '<a>' + URL_EMAIL + '</a>';
+  lblVer.Caption     := Format(lblVer.Caption, [VersionToString]);
+  linkWeb.Caption    := '<a>' + URL_WEB + '</a>';
+  linkEmail.Caption  := '<a>' + URL_EMAIL + '</a>';
+  linkGithub.Caption := '<a>' + URL_GITHUB + '</a>';
 
   lblSysInfo.Caption := TOSVersion.ToString
       + ' '  + Languages.LocaleName[Languages.IndexOf(Languages.UserDefaultLocale)]
@@ -378,14 +406,14 @@ begin
   L10nControl(lblScreenEdge,     'Properties.Position');
   L10nControl(cbbScreenPosition, ['Properties.Left', 'Properties.Top', 'Properties.Right', 'Properties.Bottom']);
   L10nControl(lblIconSize,       'Properties.IconSize');
-  L10nControl(chbUseBkgColor,    'Properties.BgColor');
+  L10nControl(chbUseBkgndColor,  'Properties.BgColor');
   L10nControl(lblMargin,         'Properties.Margins');
   L10nControl(lblOrder,          'Properties.Order');
   L10nControl(cbbItemOrder,      ['Properties.LtR', 'Properties.UtD']);
-  L10nControl(Label1,            'Properties.TextPos');
+  L10nControl(lblTextPosition,   'Properties.TextPos');
   L10nControl(cbbTextLayout,     ['Properties.Without' , 'Properties.Left', 'Properties.Top', 'Properties.Right', 'Properties.Bottom']);
-  L10nControl(Label6,            'Properties.TextWidth');
-  L10nControl(chbUseTxtColor,    'Properties.TextColor');
+  L10nControl(lblTextWidthIdent, 'Properties.TextWidth');
+  L10nControl(chbUseTextColor,   'Properties.TextColor');
   L10nControl(lblGlowSize,       'Properties.GlowSize');
   L10nControl(chbStayOnTop,      'Properties.AlwaysOnTop');
   // Autohide
@@ -395,16 +423,21 @@ begin
   L10nControl(lblShow,           'Properties.Show');
   L10nControl(cbbAutoShowMode,   ['Properties.MouseHover', 'Properties.MouseLC', 'Properties.MouseRC']);
   L10nControl(lblDelay,          'Properties.Delay');
+  L10nControl(lblCornerGapWidth, 'Properties.CornerTransWidth');
   L10nControl(lblHotKey,         'Properties.HotKey');
-  L10nControl(chbAutoHideTransparency, 'Properties.Transparent');
+  L10nControl(chbAutoHideTransparency, 'Properties.AutoHideTransparency');
   // Additional
-  L10nControl(lblJumplist,          'Properties.Jumplists');
+  L10nControl(lblSectionJumplist,   'Properties.Jumplists');
   L10nControl(lblJumplistShowMode,  'Properties.Show');
   L10nControl(cbbJumplistShowMode,  ['Properties.No', 'Properties.MouseRC']);
-  L10nControl(lblSectionWin7,       'Properties.ForW7');
+  L10nControl(lblJumplistRecentMax, 'Properties.JumplistRecentMaxItems');
+  L10nControl(lblSectionAdditional, 'Properties.Additional');
   L10nControl(chbLightStyle,        'Properties.Style1');
-  L10nControl(lblSectionWin8,       'Properties.ForW8');
+  //L10nControl(lblSectionWin8,       'Properties.ForW8');
   L10nControl(chbAeroGlass,         'Properties.AeroGlass');
+  //L10nControl(lblSectionWin10,      'Properties.ForW10');
+  L10nControl(lblLook,              'Properties.Look');
+  L10nControl(cbbLook,              ['Properties.Opaque', 'Properties.Transparent', 'Properties.Glass']);
   // About
   L10nControl(lblVer,               'Properties.Version');
   L10nControl(lblLocalizer,         'Properties.Localizer');
@@ -424,7 +457,7 @@ procedure TFrmProperties.FormDestroy(Sender: TObject);
 begin
   FrmProperties := nil;
   FColorPicker.Free;
-  FLinkbar.PropertiesFormDestroyed;
+  PostMessage(FLinkbar.Handle, LM_DOAUTOHIDE, 0, 0);
 end;
 
 procedure TFrmProperties.FormMouseWheel(Sender: TObject; Shift: TShiftState;
@@ -433,13 +466,10 @@ var spin: TnSpinedit;
 begin
   if Assigned(ActiveControl)
      and (ActiveControl.ClassType = TnSpinedit)
-  then spin := TnSpinedit(ActiveControl)
-  else spin := nil;
-
-  if Assigned(spin) then
-  begin
-    if wheeldelta > 0 then spin.Value := spin.Value + spin.Increment;
-    if wheeldelta < 0 then spin.Value := spin.Value - spin.Increment;
+  then begin
+    spin := TnSpinedit(ActiveControl);
+    spin.Value := spin.Value + Sign(WheelDelta) * spin.Increment;
+    Handled := True;
   end;
 end;
 
@@ -466,6 +496,7 @@ begin
 end;
 
 procedure TFrmProperties.Changed(Sender: TObject);
+var ah: Boolean;
 begin
   if (not FCanChanged)
   then Exit;
@@ -473,32 +504,30 @@ begin
   btnApply.Enabled := True;
 
   // Color additional options
-  edtColorBg.Enabled := chbUseBkgColor.Checked;
-  btnBgColorShowHide.Enabled := chbUseBkgColor.Checked;
-  clbTextColor.Enabled := chbUseTxtColor.Checked;
+  edtBkgndColor.Enabled := chbUseBkgndColor.Checked;
+  btnBkgndColorEdit.Enabled := chbUseBkgndColor.Checked;
+  clbTextColor.Enabled := chbUseTextColor.Checked;
 
   // Autohide additional options
-  cbbAutoShowMode.Enabled := chbAutoHide.Checked;
-  chbAutoHideTransparency.Enabled := chbAutoHide.Checked;
-  lblShow.Enabled := chbAutoHide.Checked;
+  ah := chbAutoHide.Checked;
+  cbbAutoShowMode.Enabled := ah;
+  chbAutoHideTransparency.Enabled := ah;
+  lblShow.Enabled := ah;
   // Mouse-Hover Delay
-  lblDelay.Enabled := chbAutoHide.Checked;
+  lblDelay.Enabled := ah;
   nseAutoShowDelay.Enabled := lblDelay.Enabled;
   // Hotkey
-  lblHotKey.Enabled := chbAutoHide.Checked;
+  lblHotKey.Enabled := ah;
   edtHotKey.Enabled := lblHotKey.Enabled;
 
+  lblCornerGapWidth.Enabled := ah;
+  nseCorner1GapWidth.Enabled := ah;
+  nseCorner2GapWidth.Enabled := ah;
+
   // Text additional options
-  Label6.Enabled := cbbTextLayout.ItemIndex > 0;
+  lblTextWidthIdent.Enabled := cbbTextLayout.ItemIndex > 0;
   nseTextWidth.Enabled := cbbTextLayout.ItemIndex > 0;
   nseTextOffset.Enabled := cbbTextLayout.ItemIndex > 0;
-
-  // Check Hotkey
-  if ((Sender = edtHotKey) and (FLinkbar.HotkeyInfo <> edtHotKey.HotkeyInfo))
-     or
-     ((Sender = chbAutoHide) and chbAutoHide.Checked)
-  then CheckHotkey(Handle, edtHotKey.HotkeyInfo);
-
 end;
 
 procedure TFrmProperties.btnCancelClick(Sender: TObject);
@@ -525,10 +554,10 @@ begin
 
   FLinkbar.AutoShowDelay := nseAutoShowDelay.Value;
 
-  FLinkbar.UseBkgColor := chbUseBkgColor.Checked;
-  FLinkbar.BkgColor := FBackgroundColor;
-  FLinkbar.UseTxtColor := chbUseTxtColor.Checked;
-  FLinkbar.TxtColor := RGB(GetBValue(FTextColor), GetGValue(FTextColor), GetRValue(FTextColor));
+  FLinkbar.BackgroundColor := FBackgroundColor;
+  FLinkbar.TextColor := FTextColor;
+  FLinkbar.UseBkgndColor := chbUseBkgndColor.Checked;
+  FLinkbar.UseTextColor := chbUseTextColor.Checked;
 
   FLinkbar.GlowSize := nseGlowSize.Value;
 
@@ -545,7 +574,11 @@ begin
   );
   FLinkbar.AutoHideTransparency := chbAutoHideTransparency.Checked;
   FLinkbar.JumplistShowMode := TJumplistShowMode(cbbJumplistShowMode.ItemIndex);
+  FLinkbar.JumplistRecentMax := nseJumplistRecentMax.Value;
   FLinkbar.StayOnTop := chbStayOnTop.Checked;
+  FLinkbar.LookMode := TLookMode(cbbLook.ItemIndex);
+  FLinkbar.Corner1GapWidth := nseCorner1GapWidth.Value;
+  FLinkbar.Corner2GapWidth := nseCorner2GapWidth.Value;
 
   FLinkbar.UpdateItemSizes;
 
@@ -557,29 +590,31 @@ begin
 
   FLinkbar.HotkeyInfo := edtHotKey.HotkeyInfo;
 
+  FLinkbar.SaveSettings;
+
   if (Sender = btnOk)
   then begin
     Close;
     Exit;
   end;
-  btnApply.Enabled := False;
-  ActiveControl := btnOk;
 
   chbAutoHide.Checked := FLinkbar.AutoHide;
+  btnApply.Enabled := False;
+  ActiveControl := btnOk;
 end;
 
-procedure TFrmProperties.edtColorBgChange(Sender: TObject);
+procedure TFrmProperties.edtBkgndColorChange(Sender: TObject);
 begin
-  if (Sender = edtColorBg) 
-  then FBackgroundColor := StrToIntDef(HexDisplayPrefix + edtColorBg.Text, 0);
-  
+  if (Sender = edtBkgndColor)
+  then FBackgroundColor := Cardinal(StrToIntDef(HexDisplayPrefix + edtBkgndColor.Text, 0));
+
   if (Sender = clbTextColor)
-  then FTextColor := clbTextColor.Selected;
-  
+  then FTextColor := Cardinal(clbTextColor.Selected);
+
   Changed(Sender);
 end;
 
-procedure TFrmProperties.edtColorBgKeyPress(Sender: TObject; var Key: Char);
+procedure TFrmProperties.edtBkgndColorKeyPress(Sender: TObject; var Key: Char);
 begin
   if (Key = #8)
   then Exit;
@@ -590,7 +625,7 @@ end;
 
 procedure TFrmProperties.btnBgColorClick(Sender: TObject);
 begin
-  if (Sender = btnBgColorShowHide)
+  if (Sender = btnBkgndColorEdit)
   then begin
     FColorPicker.Color := BackgroundColor;
     if (FColorPicker.ShowModal = mrOk)
@@ -601,13 +636,13 @@ end;
 procedure TFrmProperties.SetBackgroundColor(AValue: Cardinal);
 begin
   FBackgroundColor := AValue;
-  edtColorBg.Text := IntToHex(FBackgroundColor, 8);
+  edtBkgndColor.Text := IntToHex(FBackgroundColor, 8);
 end;
 
 procedure TFrmProperties.SetTextColor(AValue: Cardinal);
 begin
   FTextColor := AValue and $ffffff;
-  clbTextColor.Selected := RGB(GetBValue(FTextColor), GetGValue(FTextColor), GetRValue(FTextColor));
+  clbTextColor.Selected := FTextColor;
 end;
 
 end.

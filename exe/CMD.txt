@@ -1,7 +1,7 @@
 -d[param] 
 Set startup delay 
 [param] = time in milliseconds
- 
+
 -l[param] 
 Set UI language
 [param] = 1033 or en-US (English)
@@ -13,10 +13,11 @@ Set UI language
           1049 or ru-RU (Russian)
           2052 or zh-CN (Chinese-Simplified)
           1042 or ko-KR (Korean)
- 
+          1034 or es-ES (Spanish)
+
 -f[param] 
 Set path to configuration file
 [param] = path to *.lbr 
- 
+
 -n
 Open "New Linkbar" dialog

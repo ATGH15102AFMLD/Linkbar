@@ -1,11 +1,13 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit ColorPicker;
 
 interface
+
+{$R-}
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
@@ -205,9 +207,6 @@ begin
 
   PaintAlphaColor;
 
-  imgColor.Canvas.Pen.Color := clBlack;
-  imgColor.Canvas.Brush.Style := bsClear;
-
   if not TextEnter
   then editColor.Text := IntToHex(Cardinal(NewColor), 8);
 end;
@@ -253,12 +252,7 @@ begin
 end;
 
 procedure TfrmColorPicker.FormCreate(Sender: TObject);
-const
-  Colors: array[0..15] of TColor = (clBlack, clWhite, clGray, clSilver,
-    clMaroon, clRed, clGreen, clLime, clOlive, clYellow, clNavy, clBlue,
-    clPurple, clFuchsia, clTeal, clAqua);
-var
-  i: Integer;
+var i: Integer;
 begin
   L10n;
 
@@ -449,7 +443,8 @@ end;
 procedure TfrmColorPicker.PaintColorHue;
 var
   Row: PRGBArray;
-  slMain, slSize, slPtr: Integer;
+  slMain, slPtr: UIntPtr;
+  slSize: IntPtr;
   x, y, w, h: Integer;
   m1, q1, q2, q3, s1, s2: Integer;
   r, g, b: Byte;
@@ -466,8 +461,8 @@ begin
     SetLength(LUT, w + 1);
     for x := 0 to w do
       LUT[x] := MulDiv(255, x, w);
-    slMain := Integer(HBoxBmp.ScanLine[0]);
-    slSize := Integer(HBoxBmp.ScanLine[1]) - slMain;
+    slMain := UIntPtr(HBoxBmp.ScanLine[0]);
+    slSize := UIntPtr(HBoxBmp.ScanLine[1]) - slMain;
     slPtr := slMain;
     for y := 0 to h do
     begin
@@ -511,7 +506,7 @@ end;
 procedure TfrmColorPicker.PaintAlphaColor;
 var
   Row: PRGBArray;
-  RowOff: Integer;
+  RowOff: IntPtr;
   x, y, a: Integer;
   bool: Boolean;
   c1, c2, c3: TRGB;
@@ -523,7 +518,7 @@ begin
   c2.G := 255;
   c2.B := 255;
   Row := PRGBArray(ColorBmp.ScanLine[0]);
-  RowOff := Integer(ColorBmp.ScanLine[1]) - Integer(ColorBmp.ScanLine[0]);
+  RowOff := UIntPtr(ColorBmp.ScanLine[1]) - UIntPtr(Row);
   a := 255 - OldColor.A;
   c3.b := OldColor.B;
   c3.g := OldColor.G;
@@ -538,9 +533,9 @@ begin
       c3.g := NewColor.G;
       c3.b := NewColor.B;
     end;
-    c1.R := a * (0 - c3.r) shr 8 + c3.r;
-    c1.G := a * (0 - c3.g) shr 8 + c3.g;
-    c1.B := a * (0 - c3.b) shr 8 + c3.b;
+    c1.R := a * (164 - c3.r) shr 8 + c3.r;
+    c1.G := a * (164 - c3.g) shr 8 + c3.g;
+    c1.B := a * (164 - c3.b) shr 8 + c3.b;
     c2.R := a * (255 - c3.r) shr 8 + c3.r;
     c2.G := a * (255 - c3.g) shr 8 + c3.g;
     c2.B := a * (255 - c3.b) shr 8 + c3.b;
@@ -553,7 +548,7 @@ begin
       else
         Row[x] := c2;
     end;
-    Row := PRGBArray(Integer(Row) + RowOff);
+    Row := PRGBArray(UIntPtr(Row) + RowOff);
   end;
 
   imgColor.Canvas.StretchDraw(Rect(0, 0, imgColor.Width, imgColor.Height), ColorBmp);
@@ -562,7 +557,7 @@ end;
 procedure TfrmColorPicker.PaintAlphaBar;
 var
   Row: PRGBArray;
-  RowOff: Integer;
+  RowOff: IntPtr;
   x, y, a: Integer;
   bool: Boolean;
   c1, c2: TRGB;
@@ -574,14 +569,14 @@ begin
   c2.G := 255;
   c2.B := 255;
   Row := PRGBArray(ABarBmp.ScanLine[0]);
-  RowOff := Integer(ABarBmp.ScanLine[1]) - Integer(ABarBmp.ScanLine[0]);
+  RowOff := UIntPtr(ABarBmp.ScanLine[1]) - UIntPtr(Row);
   for y := 0 to ABarBmp.Height - 1 do
   begin
     bool := (y and 4 = 0);
     a := 255 - MulDiv(255, y, AlpBarHeight);
-    c1.R := a * (0 - NewColor.R) shr 8 + NewColor.r;
-    c1.G := a * (0 - NewColor.G) shr 8 + NewColor.g;
-    c1.B := a * (0 - NewColor.B) shr 8 + NewColor.b;
+    c1.R := a * (164 - NewColor.R) shr 8 + NewColor.r;
+    c1.G := a * (164 - NewColor.G) shr 8 + NewColor.g;
+    c1.B := a * (164 - NewColor.B) shr 8 + NewColor.b;
     c2.R := a * (255 - NewColor.r) shr 8 + NewColor.r;
     c2.G := a * (255 - NewColor.g) shr 8 + NewColor.g;
     c2.B := a * (255 - NewColor.b) shr 8 + NewColor.b;
@@ -594,7 +589,7 @@ begin
       else
         Row[x] := c2;
     end;
-    Row := PRGBArray(Integer(Row) + RowOff);
+    Row := PRGBArray(UIntPtr(Row) + RowOff);
   end;
 
   imgAlpha.Canvas.StretchDraw(Rect(0, 0, imgAlpha.Width, imgAlpha.Height), ABarBmp);

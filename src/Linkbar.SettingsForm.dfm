@@ -1,12 +1,11 @@
 object FrmProperties: TFrmProperties
-  Left = 600
-  Top = 263
-  ActiveControl = chbLightStyle
+  Left = 206
+  Top = 169
   BiDiMode = bdLeftToRight
   BorderIcons = [biSystemMenu]
   BorderWidth = 4
-  ClientHeight = 517
-  ClientWidth = 383
+  ClientHeight = 409
+  ClientWidth = 408
   Color = clBtnFace
   DefaultMonitor = dmMainForm
   Font.Charset = DEFAULT_CHARSET
@@ -17,7 +16,7 @@ object FrmProperties: TFrmProperties
   FormStyle = fsStayOnTop
   OldCreateOrder = False
   ParentBiDiMode = False
-  Position = poDesigned
+  Position = poScreenCenter
   OnClose = FormClose
   OnDestroy = FormDestroy
   OnMouseWheel = FormMouseWheel
@@ -31,7 +30,7 @@ object FrmProperties: TFrmProperties
     Top = 6
     Width = 399
     Height = 361
-    ActivePage = tsView
+    ActivePage = tsAbout
     Align = alCustom
     Anchors = [akLeft, akTop, akRight]
     TabOrder = 0
@@ -57,7 +56,7 @@ object FrmProperties: TFrmProperties
         BevelOuter = bvNone
         ShowCaption = False
         TabOrder = 7
-        object chbUseTxtColor: TCheckBox
+        object chbUseTextColor: TCheckBox
           Left = 0
           Top = 0
           Width = 185
@@ -79,7 +78,7 @@ object FrmProperties: TFrmProperties
           Selected = clWhite
           Style = [cbStandardColors, cbCustomColor, cbPrettyNames, cbCustomColors]
           TabOrder = 1
-          OnChange = edtColorBgChange
+          OnChange = edtBkgndColorChange
         end
       end
       object pnlDummy1: TPanel
@@ -89,7 +88,6 @@ object FrmProperties: TFrmProperties
         Height = 22
         Anchors = [akLeft, akTop, akRight]
         BevelOuter = bvNone
-        Color = clRed
         ShowCaption = False
         TabOrder = 0
         object lblScreenEdge: TLabel
@@ -244,7 +242,7 @@ object FrmProperties: TFrmProperties
         BevelOuter = bvNone
         ShowCaption = False
         TabOrder = 5
-        object Label1: TLabel
+        object lblTextPosition: TLabel
           Left = 0
           Top = 0
           Width = 76
@@ -280,7 +278,7 @@ object FrmProperties: TFrmProperties
         BevelOuter = bvNone
         ShowCaption = False
         TabOrder = 6
-        object Label6: TLabel
+        object lblTextWidthIdent: TLabel
           Left = 0
           Top = 0
           Width = 105
@@ -332,7 +330,7 @@ object FrmProperties: TFrmProperties
         BevelOuter = bvNone
         ShowCaption = False
         TabOrder = 2
-        object btnBgColorShowHide: TSpeedButton
+        object btnBkgndColorEdit: TSpeedButton
           Left = 348
           Top = 0
           Width = 23
@@ -341,7 +339,7 @@ object FrmProperties: TFrmProperties
           Caption = '...'
           OnClick = btnBgColorClick
         end
-        object edtColorBg: TEdit
+        object edtBkgndColor: TEdit
           Tag = 3
           Left = 208
           Top = 0
@@ -353,10 +351,10 @@ object FrmProperties: TFrmProperties
           MaxLength = 8
           TabOrder = 1
           Text = 'FFFFFFFF'
-          OnChange = edtColorBgChange
-          OnKeyPress = edtColorBgKeyPress
+          OnChange = edtBkgndColorChange
+          OnKeyPress = edtBkgndColorKeyPress
         end
-        object chbUseBkgColor: TCheckBox
+        object chbUseBkgndColor: TCheckBox
           Left = 0
           Top = 0
           Width = 185
@@ -418,7 +416,6 @@ object FrmProperties: TFrmProperties
           Caption = 'Always on top'
           TabOrder = 0
           OnClick = Changed
-          ExplicitWidth = 348
         end
       end
     end
@@ -438,7 +435,7 @@ object FrmProperties: TFrmProperties
       end
       object chbAutoHideTransparency: TCheckBox
         Left = 8
-        Top = 183
+        Top = 255
         Width = 370
         Height = 17
         Anchors = [akLeft, akTop, akRight]
@@ -472,6 +469,7 @@ object FrmProperties: TFrmProperties
           Width = 163
           Height = 22
           Align = alRight
+          Increment = 50
           MaxValue = 60000
           MinValue = 0
           TabOrder = 0
@@ -546,14 +544,13 @@ object FrmProperties: TFrmProperties
       end
       object pnlHotkey: TPanel
         Left = 8
-        Top = 108
+        Top = 139
         Width = 371
         Height = 22
         Anchors = [akLeft, akTop, akRight]
         BevelOuter = bvNone
-        ParentColor = True
         ShowCaption = False
-        TabOrder = 3
+        TabOrder = 4
         object lblHotKey: TLabel
           Left = 0
           Top = 0
@@ -561,20 +558,64 @@ object FrmProperties: TFrmProperties
           Height = 22
           Align = alLeft
           Caption = 'Keyboard shortcut:'
+          Transparent = True
           Layout = tlCenter
           ExplicitHeight = 14
         end
       end
-      object pnlHotkeyEdit: TPanel
+      object pnlCornerGapWidth: TPanel
         Left = 8
-        Top = 136
+        Top = 111
         Width = 371
         Height = 22
         Anchors = [akLeft, akTop, akRight]
         BevelOuter = bvNone
-        ParentColor = True
         ShowCaption = False
-        TabOrder = 4
+        TabOrder = 3
+        object lblCornerGapWidth: TLabel
+          Left = 0
+          Top = 0
+          Width = 104
+          Height = 22
+          Align = alLeft
+          Caption = 'Corner gaps width:'
+          Layout = tlCenter
+          ExplicitHeight = 14
+        end
+        object Bevel2: TBevel
+          Left = 287
+          Top = 0
+          Width = 5
+          Height = 22
+          Align = alRight
+          Shape = bsSpacer
+        end
+        object nseCorner1GapWidth: TnSpinEdit
+          Left = 208
+          Top = 0
+          Width = 79
+          Height = 22
+          Align = alRight
+          Increment = 20
+          MaxValue = 0
+          MinValue = 0
+          TabOrder = 0
+          Value = 0
+          OnChange = Changed
+        end
+        object nseCorner2GapWidth: TnSpinEdit
+          Left = 292
+          Top = 0
+          Width = 79
+          Height = 22
+          Align = alRight
+          Increment = 20
+          MaxValue = 0
+          MinValue = 0
+          TabOrder = 1
+          Value = 0
+          OnChange = Changed
+        end
       end
     end
     object tsAdditionally: TTabSheet
@@ -583,23 +624,15 @@ object FrmProperties: TFrmProperties
       DesignSize = (
         391
         332)
-      object lblSectionWin7: TLabel
+      object lblSectionAdditional: TLabel
         Left = 8
-        Top = 98
-        Width = 82
+        Top = 110
+        Width = 53
         Height = 14
-        Caption = 'For Windows 7'
+        Caption = 'Additional'
         Transparent = True
       end
-      object lblSectionWin8: TLabel
-        Left = 8
-        Top = 149
-        Width = 105
-        Height = 14
-        Caption = 'For Windows 8/8.1'
-        Transparent = True
-      end
-      object lblJumplist: TLabel
+      object lblSectionJumplist: TLabel
         Left = 8
         Top = 8
         Width = 48
@@ -609,14 +642,14 @@ object FrmProperties: TFrmProperties
       end
       object pnlLightStyle: TPanel
         Left = 8
-        Top = 110
+        Top = 122
         Width = 371
         Height = 34
         Anchors = [akLeft, akTop, akRight]
         BevelOuter = bvNone
         ParentColor = True
         ShowCaption = False
-        TabOrder = 1
+        TabOrder = 2
         object chbLightStyle: TCheckBox
           Left = 0
           Top = 0
@@ -631,24 +664,24 @@ object FrmProperties: TFrmProperties
       end
       object chbAeroGlass: TCheckBox
         Left = 8
-        Top = 185
+        Top = 155
         Width = 368
-        Height = 17
+        Height = 22
         Align = alCustom
         Anchors = [akLeft, akTop, akRight]
         Caption = 'Enable AeroGlass support (installed separately)'
-        TabOrder = 2
+        TabOrder = 3
         WordWrap = True
         OnClick = Changed
       end
       object chbShowHints: TCheckBox
-        Left = 8
-        Top = 216
+        Left = 3
+        Top = 300
         Width = 367
         Height = 17
         Align = alCustom
         Caption = 'Show hints'
-        TabOrder = 3
+        TabOrder = 5
         Visible = False
         OnClick = Changed
       end
@@ -659,7 +692,6 @@ object FrmProperties: TFrmProperties
         Height = 22
         Anchors = [akLeft, akTop, akRight]
         BevelOuter = bvNone
-        Color = clRed
         ShowCaption = False
         TabOrder = 0
         object lblJumplistShowMode: TLabel
@@ -684,6 +716,93 @@ object FrmProperties: TFrmProperties
           Items.Strings = (
             'Disabled'
             'Mouse right-click')
+        end
+      end
+      object pnlJumplistRecentMax: TPanel
+        Left = 8
+        Top = 61
+        Width = 371
+        Height = 33
+        Anchors = [akLeft, akTop, akRight]
+        BevelOuter = bvNone
+        ShowCaption = False
+        TabOrder = 1
+        object lblJumplistRecentMax: TLabel
+          Left = 0
+          Top = 0
+          Width = 291
+          Height = 33
+          Align = alClient
+          Caption = 'Max items:'
+          Layout = tlCenter
+          WordWrap = True
+          ExplicitWidth = 58
+          ExplicitHeight = 14
+        end
+        object Bevel1: TBevel
+          Left = 291
+          Top = 0
+          Width = 32
+          Height = 33
+          Align = alRight
+          Shape = bsSpacer
+        end
+        object pnlDummy21: TPanel
+          Left = 323
+          Top = 0
+          Width = 48
+          Height = 33
+          Align = alRight
+          BevelOuter = bvNone
+          Caption = 'pnlDummy21'
+          ShowCaption = False
+          TabOrder = 0
+          object nseJumplistRecentMax: TnSpinEdit
+            Left = 0
+            Top = 0
+            Width = 48
+            Height = 22
+            Align = alCustom
+            MaxValue = 99
+            MinValue = 1
+            TabOrder = 0
+            Value = 1
+            OnChange = Changed
+          end
+        end
+      end
+      object pnlLook: TPanel
+        Left = 8
+        Top = 193
+        Width = 371
+        Height = 22
+        Anchors = [akLeft, akTop, akRight]
+        BevelOuter = bvNone
+        ShowCaption = False
+        TabOrder = 4
+        object lblLook: TLabel
+          Left = 0
+          Top = 0
+          Width = 26
+          Height = 22
+          Align = alLeft
+          Caption = 'Look'
+          Layout = tlCenter
+          ExplicitHeight = 14
+        end
+        object cbbLook: TComboBox
+          Left = 208
+          Top = 0
+          Width = 163
+          Height = 22
+          Align = alRight
+          Style = csDropDownList
+          TabOrder = 0
+          OnChange = Changed
+          Items.Strings = (
+            'Opaque'
+            'Transparent'
+            'Glass')
         end
       end
     end
@@ -718,21 +837,21 @@ object FrmProperties: TFrmProperties
       end
       object Label2: TLabel
         Left = 8
-        Top = 115
+        Top = 132
         Width = 68
         Height = 14
         Caption = 'System info:'
       end
       object lblLocalizer: TLabel
         Left = 8
-        Top = 76
+        Top = 96
         Width = 75
         Height = 14
         Caption = 'localizer: Asaq'
       end
       object lblSysInfo: TLabel
         Left = 8
-        Top = 135
+        Top = 152
         Width = 372
         Height = 70
         Anchors = [akLeft, akTop, akRight]
@@ -740,6 +859,13 @@ object FrmProperties: TFrmProperties
         Caption = 'lblSysInfo'#13#10'1'#13#10'2'#13#10'3'#13#10'4'
         PopupMenu = pmSysInfo
         WordWrap = True
+      end
+      object lblGithub: TLabel
+        Left = 8
+        Top = 76
+        Width = 41
+        Height = 14
+        Caption = 'GitHub:'
       end
       object linkEmail: TLinkLabel
         Left = 46
@@ -758,6 +884,16 @@ object FrmProperties: TFrmProperties
         Height = 18
         Caption = '<a href="">linkbar webpage</a>'
         TabOrder = 1
+        TabStop = True
+        OnLinkClick = linkWebLinkClick
+      end
+      object linkGithub: TLinkLabel
+        Left = 52
+        Top = 76
+        Width = 77
+        Height = 18
+        Caption = '<a href="">linkbar github</a>'
+        TabOrder = 2
         TabStop = True
         OnLinkClick = linkWebLinkClick
       end
@@ -785,8 +921,8 @@ object FrmProperties: TFrmProperties
     OnClick = btnCancelClick
   end
   object btnOk: TButton
-    Left = 130
-    Top = 488
+    Left = 156
+    Top = 374
     Width = 80
     Height = 25
     Anchors = [akTop, akRight]

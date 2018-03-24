@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit HotKey;
@@ -8,9 +8,8 @@ unit HotKey;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  Vcl.Controls, Vcl.Forms, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.StdCtrls,
-  Vcl.Dialogs, Vcl.Menus;
+  System.SysUtils, System.Classes, Winapi.Windows, Winapi.Messages,
+  Vcl.Controls, Vcl.Forms, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.Dialogs, Vcl.Menus, Vcl.Buttons;
 
 const
   LB_HOTKEY_ID = 1;
@@ -26,28 +25,35 @@ type
   public
     Modifiers: Word;                                                            // Winapi.Windows.MOD_...
     KeyCode: Word;                                                              // Virtual Key Code
-    constructor Create(const AInteger: Integer);  overload;
-    constructor Create(const AString: String);  overload;
     class operator NotEqual(const Lhs, Rhs: THotkeyInfo): Boolean;
-    class operator Implicit(A: THotkeyInfo): string;
-    class operator Implicit(A: THotkeyInfo): Integer;
+    class operator Implicit(const A: THotkeyInfo): string;
+    class operator Implicit(const A: THotkeyInfo): Integer;
+    class operator Implicit(const A: string): THotkeyInfo;
+    class operator Implicit(const A: Integer): THotkeyInfo;
     function ToUserString: string;
   end;
 
   THotkeyEdit = class(TFrame)
     htkKey: THotKey;
-    chbWin: TCheckBox;
-    chbAlt: TCheckBox;
-    chbCtrl: TCheckBox;
-    chbShift: TCheckBox;
     Bevel1: TBevel;
+    btnShift: TSpeedButton;
+    btnWin: TSpeedButton;
+    btnAlt: TSpeedButton;
+    btnCtrl: TSpeedButton;
+    Bevel2: TBevel;
+    Bevel3: TBevel;
+    Bevel4: TBevel;
+    Bevel5: TBevel;
+    pnlButtons: TPanel;
     procedure Changed(Sender: TObject);
     procedure FrameResize(Sender: TObject);
+    procedure btnShiftClick(Sender: TObject);
   private
     FOnChange: TNotifyEvent;
     procedure SetHotkeyInfo(AHotKeyInfo: THotkeyInfo);
     function GetHotkeyInfo: THotkeyInfo;
     procedure CMEnabledChanged(var Message: TMessage); message CM_ENABLEDCHANGED;
+    procedure UpdatePixelsPerInch;
   public
     constructor Create(AOwner: TComponent); override;
     property HotkeyInfo: THotkeyInfo read GetHotkeyInfo write SetHotkeyInfo;
@@ -60,9 +66,10 @@ type
       lParam: LPARAM; lpRefData: LONG_PTR): HResult; override;
   end;
 
-  function RegisterHotkeyNotify(AWnd: HWND; AHotkeyInfo: THotkeyInfo; AWarnings: Boolean = True): Boolean;
+  function RegisterHotkeyNotify(AWnd: HWND; AHotkeyInfo: THotkeyInfo; AWarnings:
+    Boolean = True): Boolean;
   function UnregisterHotkeyNotify(AWnd: HWND): Boolean;
-  function CheckHotkey(AWnd: HWND; AHotkeyInfo: THotkeyInfo): Boolean;
+  function CheckHotkey(AWnd: HWND; const AHotkeyInfo: THotkeyInfo): Boolean;
 
 implementation
 
@@ -72,25 +79,25 @@ uses Linkbar.Consts, Winapi.CommCtrl, Linkbar.Shell;
 
 { THotKeyInfo }
 
-constructor THotkeyInfo.Create(const AInteger: Integer);
+class operator THotkeyInfo.Implicit(const A: THotkeyInfo): string;
 begin
-  Self.KeyCode := Word(AInteger);
-  Self.Modifiers := HiWord(AInteger);
+  Result := HexDisplayPrefix + IntToHex(Integer(A), 8);
 end;
 
-constructor THotkeyInfo.Create(const AString: String);
-begin
-  Create( StrToIntDef(AString, 0) );
-end;
-
-class operator THotkeyInfo.Implicit(A: THotkeyInfo): string;
-begin
-  Result := HexDisplayPrefix + IntToHex(A, 8);
-end;
-
-class operator THotkeyInfo.Implicit(A: THotkeyInfo): Integer;
+class operator THotkeyInfo.Implicit(const A: THotkeyInfo): Integer;
 begin
   Result := (A.Modifiers shl 16) or A.KeyCode;
+end;
+
+class operator THotkeyInfo.Implicit(const A: string): THotkeyInfo;
+begin
+  Result := StrToIntDef(A, 0);
+end;
+
+class operator THotkeyInfo.Implicit(const A: Integer): THotkeyInfo;
+begin
+  Result.KeyCode := Word(A);
+  Result.Modifiers := HiWord(A);
 end;
 
 class operator THotkeyInfo.NotEqual(const Lhs, Rhs: THotkeyInfo): Boolean;
@@ -118,39 +125,72 @@ begin
   htkKey.InvalidKeys := [hcNone, hcShift, hcCtrl, hcAlt, hcShiftCtrl, hcShiftAlt, hcCtrlAlt, hcShiftCtrlAlt];
   htkKey.Modifiers := [];
   htkKey.HotKey := 0;
+
+  UpdatePixelsPerInch;
+end;
+
+procedure THotkeyEdit.UpdatePixelsPerInch;
+var ppi: Integer;
+
+  function ScaleDimension(const X: Integer): Integer;
+  begin
+    Result := MulDiv(X, ppi, 96);
+  end;
+
+begin
+  ppi := Screen.PixelsPerInch;
+  Bevel1.Width := ScaleDimension(Bevel1.Width);
+  Bevel2.Width := ScaleDimension(Bevel2.Width);
+  btnWin.Width := ScaleDimension(btnWin.Width);
+  Bevel3.Width := ScaleDimension(Bevel3.Width);
+  btnAlt.Width := ScaleDimension(btnAlt.Width);
+  Bevel4.Width := ScaleDimension(Bevel4.Width);
+  btnCtrl.Width := ScaleDimension(btnCtrl.Width);
+  Bevel5.Width := ScaleDimension(Bevel5.Width);
+  btnShift.Width := ScaleDimension(btnShift.Width);
+  pnlButtons.Width := 4 * Bevel2.Width + 4 * btnWin.Width;
+  pnlButtons.Left := Bevel1.Left - pnlButtons.Width;
 end;
 
 procedure THotkeyEdit.FrameResize(Sender: TObject);
+var r: TRect;
 begin
-  htkKey.BoundsRect := Bevel1.BoundsRect;
+  r := Bevel1.BoundsRect;
+  r.Inflate(-2, -1);
+  htkKey.BoundsRect := r;
 end;
 
 procedure THotkeyEdit.CMEnabledChanged(var Message: TMessage);
 begin
-  chbShift.Enabled := Enabled;
-  chbCtrl.Enabled := Enabled;
-  chbAlt.Enabled := Enabled;
-  chbWin.Enabled := Enabled;
+  btnShift.Enabled := Enabled;
+  btnCtrl.Enabled := Enabled;
+  btnAlt.Enabled := Enabled;
+  btnWin.Enabled := Enabled;
   htkKey.Enabled := Enabled;
 end;
 
 procedure THotkeyEdit.SetHotkeyInfo(AHotKeyInfo: THotKeyInfo);
 begin
   htkKey.HotKey := AHotKeyInfo.KeyCode;
-  chbShift.Checked := (AHotKeyInfo.Modifiers and MOD_SHIFT) > 0;
-  chbCtrl.Checked := (AHotKeyInfo.Modifiers and MOD_CONTROL) > 0;
-  chbAlt.Checked := (AHotKeyInfo.Modifiers and MOD_ALT) > 0;
-  chbWin.Checked := (AHotKeyInfo.Modifiers and MOD_WIN) > 0;
+  btnShift.Down := (AHotKeyInfo.Modifiers and MOD_SHIFT) > 0;
+  btnCtrl.Down := (AHotKeyInfo.Modifiers and MOD_CONTROL) > 0;
+  btnAlt.Down := (AHotKeyInfo.Modifiers and MOD_ALT) > 0;
+  btnWin.Down := (AHotKeyInfo.Modifiers and MOD_WIN) > 0;
 end;
 
 function THotkeyEdit.GetHotkeyInfo: THotkeyInfo;
 begin
   Result.KeyCode := htkKey.HotKey;
   Result.Modifiers := 0;
-  if (chbShift.Checked) then Inc(Result.Modifiers, MOD_SHIFT);
-  if (chbCtrl.Checked) then Inc(Result.Modifiers, MOD_CONTROL);
-  if (chbAlt.Checked) then Inc(Result.Modifiers, MOD_ALT);
-  if (chbWin.Checked) then Inc(Result.Modifiers, MOD_WIN);
+  if (btnShift.Down) then Inc(Result.Modifiers, MOD_SHIFT);
+  if (btnCtrl.Down) then Inc(Result.Modifiers, MOD_CONTROL);
+  if (btnAlt.Down) then Inc(Result.Modifiers, MOD_ALT);
+  if (btnWin.Down) then Inc(Result.Modifiers, MOD_WIN);
+end;
+
+procedure THotkeyEdit.btnShiftClick(Sender: TObject);
+begin
+  Changed(Self);
 end;
 
 procedure THotkeyEdit.Changed(Sender: TObject);
@@ -158,6 +198,8 @@ begin
   if Assigned(FOnChange)
   then FOnChange(Self);
 end;
+
+{ ... }
 
 function RegisterHotkeyNotify(AWnd: HWND; AHotkeyInfo: THotkeyInfo;
   AWarnings: Boolean = True): Boolean;
@@ -200,7 +242,7 @@ begin
   Result := UnregisterHotKey(AWnd, LB_HOTKEY_ID);
 end;
 
-function CheckHotkey(AWnd: HWND; AHotkeyInfo: THotkeyInfo): Boolean;
+function CheckHotkey(AWnd: HWND; const AHotkeyInfo: THotkeyInfo): Boolean;
 begin
   Result := RegisterHotkeyNotify(AWnd, AHotkeyInfo);
   UnregisterHotkeyNotify(AWnd);

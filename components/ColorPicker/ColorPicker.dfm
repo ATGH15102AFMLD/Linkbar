@@ -66,7 +66,7 @@ object frmColorPicker: TfrmColorPicker
     Left = 32
     Top = 5
     Width = 137
-    Height = 21
+    Height = 24
     Alignment = taCenter
     CharCase = ecUpperCase
     MaxLength = 8

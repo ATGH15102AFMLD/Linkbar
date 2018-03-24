@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.Shell;
@@ -17,7 +17,7 @@ uses
 
   function GetUIObjectOfPidl(AWnd: HWND; const APidl: PItemIDList;
     const ARiid: TIID; out ppv): HRESULT;
-  
+
   function GetUIObjectOfFile(AWnd: HWND; const AFileName: String;
     const ARiid: TIID; out ppv): HRESULT;
 
@@ -43,11 +43,11 @@ uses
   function SendShellEmail(AWnd: HWND; ARecipientEmail, ASubject, ABody: string): boolean;
 
   function RegisterBitBucketNotify(AWnd: HWND; AMessage: Cardinal): Cardinal;
-  procedure DeregisterBitBucketNotify(ANotify: Cardinal);
+  procedure UnregisterBitBucketNotify(ANotify: Cardinal);
 
 implementation
 
-uses StrUtils, Graphics, Linkbar.OS, Linkbar.Consts, Linkbar.L10n;
+uses StrUtils, Graphics, Linkbar.L10n;
 
 type
   TSHExtractIconsW = function(pszFileName: LPCWSTR; nIconIndex: Integer; cxIcon,
@@ -99,7 +99,7 @@ begin
   lpFileOp.wFunc := FO_RENAME;
   lpFileOp.pFrom := PChar(AFromName + #0);
   lpFileOp.pTo := PChar(AToName + #0);
-  lpFileOp.fFlags := FOF_RENAMEONCOLLISION or FOF_NO_UI or FOF_ALLOWUNDO;
+  lpFileOp.fFlags := FOF_ALLOWUNDO;
   SHFileOperation(lpFileOp);
 end;
 
@@ -349,7 +349,7 @@ begin
   else Result := 0;
 end;
 
-procedure DeregisterBitBucketNotify(ANotify: Cardinal);
+procedure UnregisterBitBucketNotify(ANotify: Cardinal);
 begin
   SHChangeNotifyDeregister(ANotify);
 end;

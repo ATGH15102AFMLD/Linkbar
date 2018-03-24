@@ -2,7 +2,7 @@
 
 
 ![Delphi](https://img.shields.io/badge/Delphi-XE3-red.svg)
-![Windows](https://img.shields.io/badge/Windiws-Vista--10-blue.svg)
+![Windows](https://img.shields.io/badge/Windows-Vista--10-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
 
 

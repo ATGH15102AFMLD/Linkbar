@@ -23,7 +23,10 @@ uses
   Linkbar.Newbar,
   Linkbar.Shell,
   Linkbar.L10n,
-  Linkbar.Settings in 'Linkbar.Settings.pas' {FrmProperties};
+  Linkbar.SettingsForm in 'Linkbar.SettingsForm.pas' {FrmProperties},
+  Linkbar.Graphics in 'Linkbar.Graphics.pas',
+  Linkbar.Themes in 'Linkbar.Themes.pas',
+  Linkbar.Settings in 'Linkbar.Settings.pas';
 
 {$R *.res}
 
@@ -45,10 +48,7 @@ begin
   ReportMemoryLeaksOnShutdown := True;
 {$ENDIF}
 
-  InitOS;
-                                                                                //-----------------------
-                                                                                // Check supported OS
-                                                                                //-----------------------
+  { Check supported OS }
   if not IsMinimumSupportedOS
   then begin
     MessageDlg('Sorry :('
@@ -60,32 +60,32 @@ begin
     Exit;
   end;
 
-  { Delay start }
+  { Check CMD Delay start }
   delay := 0;
   if FindCmdLineSwitch(CLK_DELAY, cmd, True)
      and TryStrToInt(cmd, delay)
-     and (delay > 0) {and (delay < INFINITE)}
+     and (delay > 0)
   then Sleep(delay);
-                                                                                //-----------------------
-                                                                                // Apply localization
-                                                                                //-----------------------
+
+  { Check CMD Language }
   FindCmdLineSwitch(CLK_LANG, cmd, True);
   L10nLoad(ExtractFilePath(ParamStr(0)) + DN_LOCALES, cmd);
 
+  { Check CMD New Linkbar }
   if FindCmdLineSwitch(CLK_NEW, True)
   then begin
     RunAsNewLinkbar;
     Exit;
   end;
 
-  if FindCmdLineSwitch(CLK_FILE, FPreferencesFileName, True)
-     and SameText(ExtractFileExt(FPreferencesFileName), EXT_LBR)
-     and TFile.Exists(FPreferencesFileName)
+  if FindCmdLineSwitch(CLK_FILE, FSettingsFileName, True)
+     and SameText(ExtractFileExt(FSettingsFileName), EXT_LBR)
+     and TFile.Exists(FSettingsFileName)
   then begin
     // delete profile if working directory invalid
-    if not IsValidPreferenceFile(FPreferencesFileName)
+    if not TSettings.IsValid(FSettingsFileName)
     then begin
-      TFile.Delete(FPreferencesFileName);
+      TFile.Delete(FSettingsFileName);
       Exit;
     end;
     OleInitialize(nil);
@@ -120,7 +120,7 @@ begin
       for i := 0 to sl.Count-1 do
       begin
         // delete profile if working directory invalid
-        if not IsValidPreferenceFile(sl[i])
+        if not TSettings.IsValid(sl[i])
         then begin
           TFile.Delete(sl[i]);
           Continue;

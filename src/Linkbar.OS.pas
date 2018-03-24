@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.OS;
@@ -11,9 +11,6 @@ interface
 
 uses Windows, SysUtils;
 
-  procedure InitOS;
-  function VersionToString: string;
-
 var
   IsWindowsXP, IsWindowsVista, IsWindows7, IsWindows8, IsWindows8dot1,
   IsWindows8And8Dot1, IsWindows10: Boolean;
@@ -22,49 +19,67 @@ var
   IsMinimumSupportedOS: Boolean;
   IsJumplistAvailable: Boolean;
 
+  VersionToString: string;
+
 implementation
 
 { TMyVersion }
 
-function VersionToString: string;
-var
-  iBufferSize: DWORD;
-  iDummy: DWORD;
-  pBuffer: Pointer;
-  FName: string;
-  pFileInfo: PVSFixedFileInfo;
-  Major, Minor, Release: Word;
+function GetVersionString: string;
+var resInfo: HRSRC;
+    resDate: HGLOBAL;
+    sz: DWORD;
+    res, resCopy: Pointer;
+    fileInfo: PVSFixedFileInfo;
+    dummy: DWORD;
+    major, minor, release: Word;
 begin
-  FName := GetModuleName(HInstance);
-  iBufferSize := GetFileVersionInfoSize(PChar(FName), iDummy);
-  if (iBufferSize > 0) then
-  begin
-    GetMem(pBuffer, iBufferSize);
-    try
-      // get fixed file info (language independent)
-      GetFileVersionInfo(PChar(FName), 0, iBufferSize, pBuffer);
-      VerQueryValue(pBuffer, '\', Pointer(pFileInfo), iDummy);
-      // read version blocks
-      Major   := HiWord(pFileInfo^.dwFileVersionMS);
-      Minor   := LoWord(pFileInfo^.dwFileVersionMS);
-      Release := HiWord(pFileInfo^.dwFileVersionLS);
-      Result := Format('%d.%d.%d', [Major, Minor, Release]);
-      if (pFileInfo^.dwFileFlags and VS_FF_SPECIALBUILD) <> 0
+  Result := 'Unknown';
+  resInfo := FindResource(HInstance, MakeIntResource(VS_VERSION_INFO), RT_VERSION);
+  if (resInfo = 0)
+  then Exit;
+  sz := SizeofResource(HInstance, resInfo);
+  if (sz = 0)
+  then Exit;
+  resCopy := GetMemory(sz);
+  try
+    resDate := LoadResource(HInstance, resInfo);
+    if (resDate = 0)
+    then Exit;
+    res := LockResource(resDate);
+    if (res <> nil)
+    then CopyMemory(resCopy, res, sz);
+
+    //FreeResource(resDate); not needed
+
+    if VerQueryValue(resCopy, '\', Pointer(fileInfo), dummy)
+       and (dummy > 0)
+    then begin
+      major   := HiWord(fileInfo^.dwFileVersionMS);
+      minor   := LoWord(fileInfo^.dwFileVersionMS);
+      release := HiWord(fileInfo^.dwFileVersionLS);
+      Result  := Format('%d.%d.%d', [major, minor, release]);
+      if (fileInfo^.dwFileFlags and VS_FF_SPECIALBUILD) <> 0
       then Result := Result + '/Experimental';
-      if ((pFileInfo^.dwFileFlags and VS_FF_DEBUG) <> 0)
+      if ((fileInfo^.dwFileFlags and VS_FF_DEBUG) <> 0)
       then Result := Result + '/Debug';
-      if (pFileInfo^.dwFileFlags and VS_FF_PRERELEASE) <> 0
+      if (fileInfo^.dwFileFlags and VS_FF_PRERELEASE) <> 0
       then Result := Result + '/Prerelease';
-      if (pFileInfo^.dwFileFlags and VS_FF_PRIVATEBUILD) <> 0
-      then Result := Result + ' Beta 1';
-    finally
-      FreeMem(pBuffer);
+      if (fileInfo^.dwFileFlags and VS_FF_PRIVATEBUILD) <> 0
+      then Result := Result + ' Beta 4';
     end;
+
+  finally
+    FreeMemory(resCopy);
   end;
 end;
 
 procedure InitOS;
 begin
+  VersionToString := GetVersionString;
+
+  IsWindowsXPOrAbove := TOSVersion.Check(5, 1);
+
   IsWindowsXPOrAbove    := CheckWin32Version( 5, 1);
   IsWindowsVistaOrAbove := CheckWin32Version( 6, 0);
   IsWindows7OrAbove     := CheckWin32Version( 6, 1);
@@ -84,5 +99,8 @@ begin
 
   IsJumplistAvailable := (IsWindows7 or IsWindows8 or IsWindows8Dot1 or IsWindows10);
 end;
+
+initialization
+  InitOS;
 
 end.

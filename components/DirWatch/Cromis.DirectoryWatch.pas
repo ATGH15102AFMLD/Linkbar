@@ -79,7 +79,7 @@ const
 const
   cShutdownTimeout = 3000;
   cFileWaitTimeout = 0;
-  
+
 type
   // the filters that control when the watch is triggered
   TWatchOption = (woFileName, woDirName, woAttributes, woSize, woLastWrite,
@@ -217,8 +217,8 @@ end;
 
 function ErrorCodeToMessage(AErrorCode: Cardinal): string; inline;
 begin
-  //Result := SysErrorMessage(AErrorCode);
-  Result := ':(';
+  Result := SysErrorMessage(AErrorCode);
+  //Result := ':(';
 end;
 
 procedure TDirWatchThread.Execute;
@@ -366,9 +366,9 @@ begin
 
   CancelIo(FDirHandle);
 
-  if FDirHandle <> INVALID_HANDLE_VALUE 
+  if FDirHandle <> INVALID_HANDLE_VALUE
   then CloseHandle(FDirHandle);
-  if Assigned(FIOResult) 
+  if Assigned(FIOResult)
   then FreeMemory(FIOResult);
 
   inherited Destroy;

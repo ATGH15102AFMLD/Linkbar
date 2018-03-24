@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.Themes;
@@ -10,40 +10,55 @@ unit Linkbar.Themes;
 interface
 
 uses
-  GdiPlus, GdiPlusHelpers,
-  Windows, SysUtils, Classes, Graphics, Controls, Forms,
-  Winapi.UxTheme, Vcl.Themes, Winapi.Dwmapi,
-  Linkbar.Consts;
+  GdiPlus,
+  System.Classes, System.Math, Vcl.Graphics, Vcl.Themes,
+  Winapi.Windows, Winapi.UxTheme, Winapi.Dwmapi,
+  Linkbar.Consts, Linkbar.Graphics;
 
 type
   PDrawBackgroundParams = ^TDrawBackgroundParams;
   TDrawBackgroundParams = record
-    Bitmap: TBitmap;
+    Bitmap: THBitmap;
     Align: TScreenAlign;
     ClipRect: TRect;
     IsLight: Boolean;
     BgColor: Cardinal;
   end;
 
-  procedure ThemeDrawButton(const ABitmap: TBitmap; const ARect: TRect;
+  procedure ThemeDrawButton(const ABitmap: THBitmap; const ARect: TRect;
     APressed: Boolean);
-  procedure ThemeDrawHover(const ABitmap: TBitmap; const AAlign: TScreenAlign;
+  procedure ThemeDrawHover(const ABitmap: THBitmap; const AAlign: TScreenAlign;
     const ARect: TRect);
   procedure ThemeDrawBackground(PParams: PDrawBackgroundParams);
-  procedure ThemeDrawGlow(const ABitmap: TBitmap; const ARect: TRect; const AColor: Cardinal);
-  procedure ThemeUpdateBlur(const AWnd: HWND; AEnabled: Boolean);
+  procedure ThemeUpdateBlur(const AWnd: HWND; const AEnabled: Boolean);
   procedure ThemeInitData(const AWnd: HWND; AIsLight: Boolean);
   procedure ThemeCloseData;
-  procedure ThemeSetWindowAttribute(AWnd: HWND);
+  procedure ThemeGetTaskbarColor(out AColor: Cardinal; const ALook: TLookMode);
+  procedure ThemeSetWindowAttribute78(const AWnd: HWND);
+  procedure ThemeSetWindowAttribute10(const AWnd: HWND; const ALookMode: TLookMode; const AColor: Cardinal);
+  procedure ThemeSetWindowAccentPolicy10(const AWnd: HWND; const ALookMode: TLookMode; const AColor: Cardinal);
   procedure GetTitleFont(AFont: TFont);
 
 var
-  ExpAeroGlassEnabled: Boolean = False;
+  ExpAeroGlassEnabled: Boolean;
+  ThemeButtonNormalTextColor, ThemeButtonSelectedTextColor, ThemeButtonPressedTextColor: TColor;
 
 implementation
 
 uses
-  Math, Linkbar.OS, Linkbar.Undoc;
+  Linkbar.OS, Linkbar.Undoc;
+
+const
+  LB_TBP_BUTTON_WV = 1;
+  LB_TBP_BUTTON_W7 = 5;
+
+  LB_TBS_BUTTON_NORMAL_WV   = 0;
+  LB_TBS_BUTTON_PRESSED_WV  = 3;
+  LB_TBS_BUTTON_SELECTED_WV = 3;
+
+  LB_TBS_BUTTON_NORMAL_W7   = 3;
+  LB_TBS_BUTTON_PRESSED_W7  = 5;
+  LB_TBS_BUTTON_SELECTED_W7 = 9;
 
 var
   hBackground: HTHEME = 0;
@@ -55,122 +70,199 @@ var
 // DWM
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure ThemeSetWindowAttribute(AWnd: HWND);
-var
-  bAttr, bPolicy1, bPolicy2: BOOL;
-  iAttr: Integer;
-  wcad: TWcaData;
-  AccentPolicy: TWcaAccentPolicy;
+{ Sets Color Alpha to 1 if it is 0 }
+function FixAlpha(const AColor: Cardinal): Cardinal; inline;
 begin
-  if not IsWindow(AWnd)
-  then Exit;
+  Result := (Max(1, AColor shr 24) shl 24) or (AColor and $00FFFFFF);
+end;
 
-  // Exclude from Aero Peek
-  bAttr := True;
-  DwmSetWindowAttribute(AWnd, DWMWA_EXCLUDED_FROM_PEEK, @bAttr, SizeOf(bAttr));
-  // Exclude from Flip3D and display it above the Flip3D rendering
-  iAttr := DWMFLIP3D_EXCLUDEBELOW;
-  DwmSetWindowAttribute(AWnd, DWMWA_FLIP3D_POLICY, @iAttr, SizeOf(iAttr));
+{ Swap Red and Blue channel }
+function SwapRedBlue(const AColor: Cardinal): Cardinal; inline;
+begin
+  Result := (AColor and $FF00FF00) or ((AColor and 255) shl 16) or ((AColor shr 16) and 255);
+end;
 
-  if IsWindowsVista or IsWindows7
-     or (IsWindows8And8Dot1 and ExpAeroGlassEnabled)
+function GetTaskbarColor8(): Cardinal;
+var cp: TColorizationParams;
+    r, g, b, gray, alpha: Cardinal;
+begin
+  Result := 0;
+  if Assigned(UDwmGetColorizationParametersProc)
   then begin
-    // http://a-whiter.livejournal.com/1385.html
-    // http://a-whiter.livejournal.com/2495.html
-    // Set non-client rendering policy
-    bPolicy1 := True;
-    DwmSetWindowAttribute(AWnd, DWMWA_NCRENDERING_POLICY, @bPolicy1, SizeOf(bPolicy1));
-    // Set client rendering policy
-    if Assigned(UDwmSetWindowCompositionAttributeProc)
-    then begin
-      if IsWindows8OrAbove
-      then wcad.dwAttribute := U_WCA_CLIENTRENDERING_POLICY_WIN8
-      else wcad.dwAttribute := U_WCA_CLIENTRENDERING_POLICY_WIN7;
-      bPolicy2 := True;
-      wcad.pvAttribute := @bPolicy2;
-      wcad.cbAttribute := SizeOf(bPolicy2);
-      UDwmSetWindowCompositionAttributeProc(AWnd, @wcad);
-    end;
+    UDwmGetColorizationParametersProc(cp);
+    r := (cp.Color shr 16) and 255;
+    g := (cp.Color shr 8) and 255;
+    b := (cp.Color) and 255;
+    gray := 217 * (100 - cp.ColorBalance) + 50;
+    r := (r * cp.ColorBalance + gray) div 100;
+    g := (g * cp.ColorBalance + gray) div 100;
+    b := (b * cp.ColorBalance + gray) div 100;
+    alpha := (cp.Color shr 24) and 255;
+    alpha := alpha * 65 div 100;
+    Result := (r shl 16) or (g shl 8) or b or (alpha shl 24);
   end;
+end;
 
-  if IsWindows10
+function GetTaskbarColor10(const ALook: TLookMode): Cardinal;
+var atype, aset: Integer;
+    transparent: Boolean;
+begin
+  Result := 0;
+  transparent := ALook <> lmOpaque;
+  if Assigned(UGetImmersiveUserColorSetPreferenceProc)
   then begin
-    // Set window accent policy
-    // https://withinrafael.com/2015/07/08/adding-the-aero-glass-blur-to-your-windows-10-apps/
-    if Assigned(UDwmSetWindowCompositionAttributeProc)
+    if (transparent)
+    then atype := UGetImmersiveColorTypeFromNameProc('ImmersiveSystemAccentDark3')
+    else atype := UGetImmersiveColorTypeFromNameProc('ImmersiveSystemAccentDark2');
+    if (atype >= 0)
     then begin
-      AccentPolicy.AccentState := U_WCA_ACCENT_STATE_ENABLE_BLURBEHIND;
-      AccentPolicy.AccentFlags := U_WCA_ACCENT_FLAG_DEFAULT;
-      AccentPolicy.GradientColor := 0;
-      AccentPolicy.AnimationId := 0;
-      wcad.dwAttribute := U_WCA_ACCENT_POLICY;
-      wcad.cbAttribute := SizeOf(AccentPolicy);
-      wcad.pvAttribute := @AccentPolicy;
-      UDwmSetWindowCompositionAttributeProc(AWnd, @wcad);
+      aset := UGetImmersiveUserColorSetPreferenceProc(False, False);
+      Result := UGetImmersiveColorFromColorSetExProc(aset, atype, True, 0);
+      Result := SwapRedBlue(Result);
+      if (transparent)
+      then Result := (Result and $FFFFFF) or (Cardinal(217) shl 24); // Default taskbar opacity 85%
     end;
   end;
 end;
 
-procedure ThemeUpdateBlur(const AWnd: HWND; AEnabled: Boolean);
+procedure ThemeGetTaskbarColor(out AColor: Cardinal; const ALook: TLookMode);
+begin
+  if IsWindows7 then AColor := 0
+  else if IsWindows8dot1 then AColor := GetTaskbarColor8()
+  else if IsWindows10 then AColor := GetTaskbarColor10(ALook);
+end;
+
+procedure ThemeSetWindowAccentPolicy10(const AWnd: HWND; const ALookMode: TLookMode;{ const AUseColor: Boolean;} const AColor: Cardinal);
+const WCA_ACCENT_STATE: array[TLookMode] of Integer = (U_WCA_ACCENT_STATE_ENABLE_GRADIENT,
+                                                       U_WCA_ACCENT_STATE_ENABLE_TRANSPARENTGRADIENT,
+                                                       U_WCA_ACCENT_STATE_ENABLE_BLURBEHIND,
+                                                       U_WCA_ACCENT_STATE_DISABLED);
+var wcad: TWcaData;
+    AccentPolicy: TWcaAccentPolicy;
+begin
+  // Set window accent policy
+  // https://withinrafael.com/2015/07/08/adding-the-aero-glass-blur-to-your-windows-10-apps/
+  if Assigned(UDwmSetWindowCompositionAttributeProc)
+  then begin
+    wcad.dwAttribute := U_WCA_ACCENT_POLICY;
+    wcad.cbAttribute := SizeOf(AccentPolicy);
+    wcad.pvAttribute := @AccentPolicy;
+
+    if (ALookMode = lmOpaque)
+    then begin
+      // When AccentState changed from Transparent to Opaque then under the window
+      // there is a "transparent ghost". It does not change its size with the Linkbar window
+      // Taskbar have similar bug. Reported this to the MS Feedback Hud
+      FillChar(AccentPolicy, SizeOf(AccentPolicy), 0);
+      AccentPolicy.AccentState := U_WCA_ACCENT_STATE_DISABLED;
+      UDwmSetWindowCompositionAttributeProc(AWnd, @wcad);
+    end;
+
+    AccentPolicy.AccentState := WCA_ACCENT_STATE[ALookMode];
+    AccentPolicy.AccentFlags := U_WCA_ACCENT_FLAG_DRAW_ALL;
+    AccentPolicy.GradientColor := SwapRedBlue(AColor);
+    AccentPolicy.AnimationId := 0;
+    UDwmSetWindowCompositionAttributeProc(AWnd, @wcad);
+  end;
+end;
+
+procedure ThemeSetWindowAttribute10(const AWnd: HWND; const ALookMode: TLookMode; {const AUseColor: Boolean;} const AColor: Cardinal);
+var bAttr: Boolean;
+    iAttr: Integer;
+begin
+  // Exclude from Aero Peek
+  bAttr := True;
+  DwmSetWindowAttribute(AWnd, DWMWA_EXCLUDED_FROM_PEEK, @bAttr, SizeOf(bAttr));
+  // Exclude from Flip3D and display it above the Flip3D rendering
+  iAttr := DWMFLIP3D_EXCLUDEABOVE;
+  DwmSetWindowAttribute(AWnd, DWMWA_FLIP3D_POLICY, @iAttr, SizeOf(iAttr));
+  // Set accent policy
+  ThemeSetWindowAccentPolicy10(AWnd, ALookMode, AColor);
+end;
+
+procedure ThemeSetWindowAttribute78(const AWnd: HWND);
+var bAttr, bPolicy1, bPolicy2: BOOL;
+    iAttr: Integer;
+    wcad: TWcaData;
+begin
+  // Exclude from Aero Peek
+  bAttr := True;
+  DwmSetWindowAttribute(AWnd, DWMWA_EXCLUDED_FROM_PEEK, @bAttr, SizeOf(bAttr));
+
+  // Exclude from Flip3D and display it below the Flip3D rendering
+  iAttr := DWMFLIP3D_EXCLUDEBELOW;
+  DwmSetWindowAttribute(AWnd, DWMWA_FLIP3D_POLICY, @iAttr, SizeOf(iAttr));
+
+  if (IsWindows8And8Dot1 and not ExpAeroGlassEnabled)
+  then Exit;
+
+  // http://a-whiter.livejournal.com/1385.html
+  // http://a-whiter.livejournal.com/2495.html
+  // Set non-client rendering policy
+  bPolicy1 := True;
+  DwmSetWindowAttribute(AWnd, DWMWA_NCRENDERING_POLICY, @bPolicy1, SizeOf(bPolicy1));
+  // Set client rendering policy
+  if Assigned(UDwmSetWindowCompositionAttributeProc)
+  then begin
+    if IsWindows8OrAbove
+    then wcad.dwAttribute := U_WCA_CLIENTRENDERING_POLICY_WIN8
+    else wcad.dwAttribute := U_WCA_CLIENTRENDERING_POLICY_WIN7;
+    bPolicy2 := True;
+    wcad.pvAttribute := @bPolicy2;
+    wcad.cbAttribute := SizeOf(bPolicy2);
+    UDwmSetWindowCompositionAttributeProc(AWnd, @wcad);
+  end;
+end;
+
+procedure ThemeUpdateBlur(const AWnd: HWND; const AEnabled: Boolean);
 var
   BlurBehind: TDwmBlurBehind;
   r: TRect;
 begin
-  if (not IsWindowsVistaOrAbove or IsWindows10OrAbove) then Exit;
+  if IsWindows10OrAbove
+     or (not DwmCompositionEnabled)
+  then Exit;
 
-  if (IsWindows8And8Dot1 and not ExpAeroGlassEnabled)
-  then AEnabled := False;
-
-  if DwmCompositionEnabled
+  FillChar(BlurBehind, SizeOf(BlurBehind), 0);
+  BlurBehind.dwFlags := DWM_BB_ENABLE;
+  BlurBehind.fEnable := AEnabled;
+  if AEnabled
   then begin
-    FillChar(BlurBehind, SizeOf(BlurBehind), 0);
-    BlurBehind.dwFlags := DWM_BB_ENABLE;
-    BlurBehind.fEnable := AEnabled;
-    if AEnabled
+    if GetWindowRect(AWnd, r)
     then begin
-      if GetWindowRect(AWnd, r)
-      then begin
-        BlurBehind.dwFlags := BlurBehind.dwFlags or DWM_BB_BLURREGION;
-        BlurBehind.hRgnBlur := CreateRectRgnIndirect( Rect(0, 0, r.width, r.height) );
-      end;
-      if (IsWindowsVista)
-      then begin
-        BlurBehind.dwFlags := BlurBehind.dwFlags or DWM_BB_TRANSITIONONMAXIMIZED;
-        BlurBehind.fTransitionOnMaximized := True;
-      end;
+      BlurBehind.dwFlags := BlurBehind.dwFlags or DWM_BB_BLURREGION;
+      BlurBehind.hRgnBlur := CreateRectRgnIndirect( Rect(0, 0, r.width, r.height) );
     end;
-    DwmEnableBlurBehindWindow(AWnd, BlurBehind);
-    if (BlurBehind.hRgnBlur <> 0)
-    then DeleteObject(BlurBehind.hRgnBlur);
+    if (IsWindowsVista)
+    then begin
+      BlurBehind.dwFlags := BlurBehind.dwFlags or DWM_BB_TRANSITIONONMAXIMIZED;
+      BlurBehind.fTransitionOnMaximized := True;
+    end;
   end;
+  DwmEnableBlurBehindWindow(AWnd, BlurBehind);
+  if (BlurBehind.hRgnBlur <> 0)
+  then DeleteObject(BlurBehind.hRgnBlur);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Draw Themes Button
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure WinXP_DrawThemedButton(const ABitmap: TBitmap; const ARect: TRect;
+procedure WinXP_DrawThemedButton(const ABitmap: THBitmap; const ARect: TRect;
   APressed: Boolean);
 var
   DrawFlags: Cardinal;
-  drawer: IGPGraphics;
-  bmp: TBitmap;
 begin
-  bmp := TBitmap.Create;
-  bmp.PixelFormat := pf24bit;
-  bmp.SetSize(ARect.Width, ARect.Height);
   { Draw as button }
   DrawFlags := DFCS_BUTTONPUSH;
   if APressed
   then DrawFlags := DrawFlags or DFCS_PUSHED
   else DrawFlags := DrawFlags or DFCS_HOT;
-  DrawFrameControl(bmp.Canvas.Handle, Rect(0, 0, ARect.Width, ARect.Height), DFC_BUTTON, DrawFlags); {}
-  drawer := ABitmap.ToGPGraphics;
-  drawer.DrawImage(bmp.ToGPBitmap, ARect.Left, ARect.Top);
-  bmp.Free;
+  DrawFrameControl(ABitmap.Dc, ARect, DFC_BUTTON, DrawFlags); {}
+  ABitmap.OpaqueRect(ARect);
 end;
 
-procedure Win7_DrawThemedButton(const ABitmap: TBitmap; const ARect: TRect;
+procedure Win7_DrawThemedButton(const ABitmap: THBitmap; const ARect: TRect;
   APressed: Boolean);
 var
   PaintRect: TRect;
@@ -179,22 +271,22 @@ var
 begin
   if IsWindowsVista
   then begin
-    Part := 1;
+    Part := LB_TBP_BUTTON_WV;
     if APressed
-    then State := 3
-    else State := 0;
+    then State := LB_TBS_BUTTON_PRESSED_WV
+    else State := LB_TBS_BUTTON_NORMAL_WV;
   end
   else begin
-    Part := 5;
+    Part := LB_TBP_BUTTON_W7;
     if APressed
-    then State := 5
-    else State := 3;
+    then State := LB_TBS_BUTTON_PRESSED_W7
+    else State := LB_TBS_BUTTON_NORMAL_W7;
   end;
   PaintRect := ARect;
-  DrawThemeBackground(hButton, ABitmap.Canvas.Handle, Part, State, PaintRect, @PaintRect);
+  DrawThemeBackground(hButton, ABitmap.Dc, Part, State, PaintRect, @PaintRect);
 end;
 
-procedure ThemeDrawButton(const ABitmap: TBitmap; const ARect: TRect;
+procedure ThemeDrawButton(const ABitmap: THBitmap; const ARect: TRect;
   APressed: Boolean);
 begin
   if StyleServices.Enabled
@@ -206,12 +298,12 @@ end;
 // Draw Themes Drag&Drop hovered item
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure WinXP_DrawThemedHover(const ABitmap: TBitmap; const ARect: TRect);
+procedure WinXP_DrawThemedHover(const ABitmap: THBitmap; const ARect: TRect);
 begin
   WinXP_DrawThemedButton(ABitmap, ARect, False);
 end;
 
-procedure Win7_DrawThemedHover(const ABitmap: TBitmap; const AAlign: TScreenAlign;
+procedure Win7_DrawThemedHover(const ABitmap: THBitmap; const AAlign: TScreenAlign;
   const ARect: TRect);
 var
   PaintRect: TRect;
@@ -221,22 +313,22 @@ var
 begin
   if IsWindowsVista
   then begin
-    Part := 1;
-    State := 3;
+    Part := LB_TBP_BUTTON_WV;
+    State := LB_TBS_BUTTON_SELECTED_WV;
     th := hButton;
   end
   else begin
-    Part := 5;
-    State := 9;
+    Part := LB_TBP_BUTTON_W7;
+    State := LB_TBS_BUTTON_SELECTED_W7;
     if (AAlign = saLeft) or (AAlign = saRight)
     then th := hButtonVertical
     else th := hButton;
   end;
   PaintRect := ARect;
-  DrawThemeBackground(th, ABitmap.Canvas.Handle, Part, State, PaintRect, @PaintRect);
+  DrawThemeBackground(th, ABitmap.Dc, Part, State, PaintRect, @PaintRect);
 end;
 
-procedure ThemeDrawHover(const ABitmap: TBitmap; const AAlign: TScreenAlign;
+procedure ThemeDrawHover(const ABitmap: THBitmap; const AAlign: TScreenAlign;
   const ARect: TRect);
 begin
   if StyleServices.Enabled
@@ -256,72 +348,38 @@ const
     (TBP_BACKGROUNDBOTTOM, 1)
   );
 
-{ used in draw bg for Windows 8/8.1/10 }
-function BlendColor_Old(AColor1, AColor2: TGPColor; ABalance: Cardinal): TGPColor;
-
-  function BlendAlphaValue(a, b: Byte; t: Byte): Byte;
-  var c: Single;
-  begin
-    c := a + (b - a) * t / 100.0;
-    Result := Min(Round(c), 255);
-  end;
-
-  function BlendColorValue(a, b: Byte; t: Single): Byte;
-  var c: Single;
-  begin
-    c := Sqrt(a * a + (b * b - a * a) * t / 100.0);
-    Result := Min(Round(c), 255);
-  end;
-
-begin
-  ABalance := Min(100, Max(0, ABalance));
-  Result := TGPColor.MakeARGB(
-    BlendAlphaValue(AColor1.A, AColor2.A, ABalance),
-    BlendColorValue(AColor1.R, AColor2.R, ABalance),
-    BlendColorValue(AColor1.G, AColor2.G, ABalance),
-    BlendColorValue(AColor1.B, AColor2.B, ABalance)
-  );
-end;
-
 {$REGION ' BG for Windows XP '}
 procedure WinXP_DrawThemedBackground(PParams: PDrawBackgroundParams);
 const BF_FLAGS: array[TScreenAlign] of UINT = (BF_RIGHT, BF_BOTTOM, BF_LEFT, BF_TOP);
 var
-  drawer: IGPGraphics;
-  bmp: TBitmap;
+  dc: HDC;
   r: TRect;
 begin
-  bmp := TBitmap.Create;
-  bmp.Canvas.Brush.Color := clBtnFace;
-  bmp.SetSize(PParams.ClipRect.Width, PParams.ClipRect.Height);
-
   r := PParams.ClipRect;
-  DrawEdge(bmp.Canvas.Handle, r, BDR_RAISED, BF_FLAGS[PParams.Align]);
-
-  drawer := PParams.Bitmap.ToGPGraphics;
-  drawer.DrawImage(bmp.ToGPBitmap, PParams.ClipRect.Left, PParams.ClipRect.Top);
-  bmp.Free;
+  dc := PParams.Bitmap.Dc;
+  FillRect(dc, r, GetSysColorBrush(COLOR_3DFACE));
+  DrawEdge(dc, r, BDR_RAISED, BF_FLAGS[PParams.Align]);
+  PParams.Bitmap.OpaqueRect(PParams.ClipRect);
 end;
 {$ENDREGION}
 
 {$REGION ' BG for Windows Vista '}
-
 procedure WinVista_DrawThemedBackground(PParams: PDrawBackgroundParams);
 var
+  dc: HDC;
   gpDrawer: IGPGraphics;
   part: Integer;
 begin
   if not StyleServices.Enabled
   then WinXP_DrawThemedBackground(PParams)
   else begin
-    gpDrawer := PParams.Bitmap.ToGPGraphics;
+    dc := PParams.Bitmap.Dc;
+    gpDrawer := TGPGraphics.Create(dc);
     gpDrawer.SetClip( TGPRect.Create(PParams.ClipRect) );
     gpDrawer.Clear( TGPColor.Create($01000000) );
 
     part := LB_PARTID[PParams.Align, False];
-
-    DrawThemeBackground(hBackground, PParams.Bitmap.Canvas.Handle, part,
-      0, Rect(0,0,PParams.Bitmap.Width,PParams.Bitmap.Height), @PParams.ClipRect);
+    DrawThemeBackground(hBackground, dc, part, 0, PParams.Bitmap.Bound, @PParams.ClipRect);
   end;
 end;
 {$ENDREGION}
@@ -329,42 +387,38 @@ end;
 {$REGION ' BG for Windows 7 '}
 procedure Win7Pure_DrawThemedBackground(PParams: PDrawBackgroundParams);
 var
+  dc: HDC;
   gpDrawer: IGPGraphics;
   part: Integer;
 begin
-  gpDrawer := PParams.Bitmap.ToGPGraphics;
+  dc := PParams.Bitmap.Dc;
+  gpDrawer := TGPGraphics.Create(dc);
   gpDrawer.SetClip( TGPRect.Create(PParams.ClipRect) );
   gpDrawer.Clear( TGPColor.Create($01000000) );
 
   part := LB_PARTID[PParams.Align, PParams.IsLight];
-
-  DrawThemeBackground(hBackground, PParams.Bitmap.Canvas.Handle, part,
-    0, Rect(0,0,PParams.Bitmap.Width,PParams.Bitmap.Height), @PParams.ClipRect);
+  DrawThemeBackground(hBackground, dc, part, 0, PParams.Bitmap.Bound, @PParams.ClipRect);
 end;
 
 procedure Win7Aero_DrawThemedBackground(PParams: PDrawBackgroundParams);
 var
+  dc: HDC;
   gpDrawer: IGPGraphics;
   part: Integer;
   th: HTHEME;
-  color: TGPColor;
 begin
-  gpDrawer := PParams.Bitmap.ToGPGraphics;
+  dc := PParams.Bitmap.Dc;
+  gpDrawer := TGPGraphics.Create(dc);
   gpDrawer.SetClip( TGPRect.Create(PParams.ClipRect) );
-
-  color.Initialize(PParams.BgColor);
-  color.Alpha := Max(color.Alpha, 1);
-
-  gpDrawer.Clear(color);
+  gpDrawer.Clear( FixAlpha(PParams.BgColor) );
 
   part := LB_PARTID[PParams.Align, PParams.IsLight];
 
-  if (PParams.Align = saLeft) or (PParams.Align = saRight)
+  if PParams.Align in [saLeft, saRight]
   then th := hBackgroundVertical
   else th := hBackground;
 
-  DrawThemeBackground(th, PParams.Bitmap.Canvas.Handle, part,
-    0, Rect(0,0,PParams.Bitmap.Width,PParams.Bitmap.Height), @PParams.ClipRect);
+  DrawThemeBackground(th, dc, part, 0, PParams.Bitmap.Bound, @PParams.ClipRect);
 end;
 
 procedure Win7_DrawThemedBackground(PParams: PDrawBackgroundParams);
@@ -385,53 +439,32 @@ end;
 
 procedure Win8Def_DrawThemedBackground(PParams: PDrawBackgroundParams);
 var
+  dc: HDC;
   gpDrawer: IGPGraphics;
-  color1, color2: TGPColor;
-  cp: TColorizationParams;
   part: integer;
 begin
-  gpDrawer := PParams.Bitmap.ToGPGraphics;
+  dc := PParams.Bitmap.Dc;
+  gpDrawer := TGPGraphics.Create(dc);
   gpDrawer.SetClip( TGPRect.Create(PParams.ClipRect) );
-
-  if (PParams.BgColor > 0)
-  then begin
-    color1.Initialize(PParams.BgColor);
-  end
-  else begin
-    if Assigned(UDwmGetColorizationParametersProc)
-    then begin
-      UDwmGetColorizationParametersProc(cp);
-      color1 := TGPColor.Create(cp.clrColor);
-      color2 := TGPColor.Create($bad9d9d9);
-      color1.Alpha := color2.Alpha;
-      color1 := BlendColor_Old(color2, color1, cp.nIntensity);
-    end;
-  end;
-
-  color1.Alpha := Max(color1.Alpha, 1);
-  gpDrawer.Clear(color1);
+  gpDrawer.Clear( FixAlpha(PParams.BgColor) );
 
   part := LB_PARTID[PParams.Align, False];
-  DrawThemeBackground(hBackground, PParams.Bitmap.Canvas.Handle, part,
-    0, Rect(0,0,PParams.Bitmap.Width,PParams.Bitmap.Height), @PParams.ClipRect);
+  DrawThemeBackground(hBackground, dc, part, 0, PParams.Bitmap.Bound, @PParams.ClipRect);
 end;
 
 procedure Win8AG_DrawThemedBackground(PParams: PDrawBackgroundParams);
 var
+  dc: HDC;
   gpDrawer: IGPGraphics;
   part: integer;
-  color: TGPColor;
 begin
-  gpDrawer := PParams.Bitmap.ToGPGraphics;
+  dc := PParams.Bitmap.Dc;
+  gpDrawer := TGPGraphics.Create(dc);
   gpDrawer.SetClip( TGPRect.Create(PParams.ClipRect) );
-
-  color.Initialize(PParams.BgColor);
-  color.Alpha := Max(color.Alpha, 1);
-  gpDrawer.Clear(color);
+  gpDrawer.Clear( FixAlpha(PParams.BgColor) );
 
   part := LB_PARTID[PParams.Align, False];
-  DrawThemeBackground(hBackground, PParams.Bitmap.Canvas.Handle, part,
-    0, Rect(0,0,PParams.Bitmap.Width,PParams.Bitmap.Height), @PParams.ClipRect);
+  DrawThemeBackground(hBackground, dc, part, 0, PParams.Bitmap.Bound, @PParams.ClipRect);
 end;
 
 procedure Win8_DrawThemedBackground(PParams: PDrawBackgroundParams);
@@ -444,34 +477,11 @@ end;
 
 {$REGION ' BG for Windows 10 '}
 procedure Win10_DrawThemedBackground(PParams: PDrawBackgroundParams);
-const WIN10BASECOLOR = $ffd9d9d9;                                               // from internet
-var
-  gpDrawer: IGPGraphics;
-  color: TGPColor;
-  cp: TColorizationParams;
+var gpDrawer: IGPGraphics;
 begin
-  gpDrawer := PParams.Bitmap.ToGPGraphics;
+  gpDrawer := TGPGraphics.Create(PParams.Bitmap.Dc);
   gpDrawer.SetClip( TGPRect.Create(PParams.ClipRect) );
-
-  if (PParams.BgColor > 0)
-  then begin
-    color.Initialize(PParams.BgColor);
-  end
-  else begin
-    if Assigned(UDwmGetColorizationParametersProc)
-    then begin
-      UDwmGetColorizationParametersProc(cp);
-      color := TGPColor.Create(cp.clrColor);
-      color.A := $e0;
-      color.R := Round(color.R * 0.6);
-      color.G := Round(color.G * 0.6);
-      color.B := Round(color.B * 0.6);
-    end;
-  end;
-
-  color.Alpha := Max(color.Alpha, 1);
-  gpDrawer.Clear(color);
-
+  gpDrawer.Clear($01000000);
 end;
 {$ENDREGION}
 
@@ -493,22 +503,12 @@ begin
   then WinXP_DrawThemedBackground(PParams);
 end;
 
-procedure ThemeDrawGlow(const ABitmap: TBitmap; const ARect: TRect;
-  const AColor: Cardinal);
-var
-  gpDrawer: IGPGraphics;
-  gpBrush: IGPSolidBrush;
-begin
-  gpDrawer := ABitmap.ToGPGraphics;
-  gpBrush := TGPSolidBrush.Create(AColor);
-  gpDrawer.FillRectangle(gpBrush, TGPRect.Create(ARect));
-end;
-
 ////////////////////////////////////////////////////////////////////////////////
 // Open/Close HTHEME's
 ////////////////////////////////////////////////////////////////////////////////
 
 procedure ThemeInitData(const AWnd: HWND; AIsLight: Boolean);
+var color: COLORREF;
 begin
   if (not IsMinimumSupportedOS) or (AWnd = 0)
   then Exit;
@@ -529,8 +529,14 @@ begin
       hBackground := OpenThemeData(AWnd, 'TaskBar::TaskBar');
       hButton := OpenThemeData(AWnd, 'TaskBand::Toolbar');
     end;
+    ThemeButtonNormalTextColor := clWhite;
+    ThemeButtonSelectedTextColor := clWhite;
+    ThemeButtonPressedTextColor := clWhite;
     Exit;
   end;
+
+  if IsWindows8OrAbove
+  then AIsLight := False;
 
   // for Windows 7/8/8.1/10
   if DwmCompositionEnabled
@@ -557,6 +563,22 @@ begin
     hButton := OpenThemeData(AWnd, 'TaskBand2::TaskBand2');
     hButtonVertical := OpenThemeData(AWnd, 'TaskBand2Vertical::TaskBand2');
   end;
+
+  // Get button text colors
+  // NOTE: Normal and Selected StateId are confused or I do not understand
+  // This work on Windows 8/8.1 with Default and HighContrast themes
+  // Normal
+  if GetThemeColor(hButton, LB_TBP_BUTTON_W7, LB_TBS_BUTTON_SELECTED_W7, TMT_TEXTCOLOR, color) = S_OK
+  then ThemeButtonNormalTextColor := color
+  else ThemeButtonNormalTextColor := clBlack;
+  // Selected
+  if GetThemeColor(hButton, LB_TBP_BUTTON_W7, LB_TBS_BUTTON_NORMAL_W7, TMT_TEXTCOLOR, color) = S_OK
+  then ThemeButtonSelectedTextColor := color
+  else ThemeButtonSelectedTextColor := clBlack;
+  // Pressed
+  if GetThemeColor(hButton, LB_TBP_BUTTON_W7, LB_TBS_BUTTON_PRESSED_W7, TMT_TEXTCOLOR, color) = S_OK
+  then ThemeButtonPressedTextColor := color
+  else ThemeButtonPressedTextColor := clBlack;
 end;
 
 procedure ThemeCloseData;

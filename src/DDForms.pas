@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit DDForms;
@@ -10,11 +10,11 @@ unit DDForms;
 interface
 
 uses
-  Windows, SysUtils, Classes, Graphics, Forms, ActiveX, ShlObj, CommCtrl,
+  Windows, SysUtils, Classes, Linkbar.Graphics, Forms, ActiveX, ShlObj, CommCtrl,
   Messages, Cromis.DirectoryWatch;
 
 const
-  WM_STOPDIRWATCH = WM_USER + 33;
+  LM_STOPDIRWATCH = WM_USER + 33;
 
 type
 
@@ -49,7 +49,7 @@ type
     procedure DoDragLeave; virtual; abstract;
     procedure DoDrop(const pt: TPoint); virtual; abstract;
     // Drag Source
-    procedure QueryDragImage(out ABitmap: TBitmap; out AOffset: TPoint); virtual; abstract;
+    procedure QueryDragImage(out ABitmap: THBitmap; out AOffset: TPoint); virtual; abstract;
   protected
     procedure DirWatchChange(const Sender: TObject; const AAction: TWatchAction;
       const AFileName: string); virtual;
@@ -74,7 +74,7 @@ type
 implementation
 
 uses
-  ComObj, Generics.Collections, Linkbar.Consts, Linkbar.Shell;
+  ComObj, Linkbar.Shell;
 
 ////////////////////////////////////////////////////////////////////////////////
 // TLinkbarCustomFrom
@@ -300,7 +300,7 @@ end;
 
 function TLinkbarCustomFrom.CreateDragImage(out ASdi: TShDragImage): Boolean;
 var
-  bmp: TBitmap;
+  bmp: THBitmap;
   pt: TPoint;
   DC: HDC;
   hbmPrev: HBITMAP;
@@ -322,7 +322,7 @@ begin
     DC := CreateCompatibleDC(HWND_DESKTOP);
     hbmPrev := SelectObject(DC, ASdi.hbmpDragImage);
     BitBlt(DC, 0, 0, ASdi.sizeDragImage.cx, ASdi.sizeDragImage.cy,
-      bmp.Canvas.Handle, 0, 0, SRCCOPY);
+      bmp.Dc, 0, 0, SRCCOPY);
     SelectObject(DC, hbmPrev);
     DeleteDC(DC);
   end;

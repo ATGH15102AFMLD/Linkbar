@@ -1,9 +1,9 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
-// Port JumpLists.h and JumpLists.cpp from the Classic Shell http://www.classicshell.net
+// Port JumpLists.h and JumpLists.cpp from the Classic Shell 3.6.8 http://www.classicshell.net
 // The sources for Linkbar are distributed under the MIT open source license
 
 unit Jumplists.Api;
@@ -81,8 +81,6 @@ type
   // Calculate FNV hash for a memory buffer
   function CalcFNVHash(const AData; ALength: integer; AHash: Cardinal = 2166136261): Cardinal; overload;
   function CalcFNVHash(const AData: PChar; AHash: Cardinal = 2166136261): Cardinal; overload;
-
-  function GetJumplistMaxCount: Integer;
 
 implementation
 
@@ -213,40 +211,6 @@ destructor TJumplist.Destroy;
 begin
   Groups.Free;
   inherited;
-end;
-
-////////////////////////////////////////////////////////////////////////////////
-
-function GetJumplistMaxCount: Integer;
-const
-  JL_REG_PATH_1 = '\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced';
-  JL_REG_KEY_1 = 'Start_JumpListItems';
-  JL_REG_PATH_2 = '\Software\Microsoft\Windows\CurrentVersion\Explorer\ApplicationDestinations';
-  JL_REG_KEY_2 = 'MaxEntries';
-var res: Integer;
-    reg: TRegistry;
-begin
-  // get jumplist items max count
-  res := 0;
-  reg := TRegistry.Create;
-  try
-    reg.RootKey := HKEY_CURRENT_USER;
-
-    if reg.OpenKeyReadOnly(JL_REG_PATH_1)
-       and (reg.GetDataType(JL_REG_KEY_1) = rdInteger)
-    then res := reg.ReadInteger(JL_REG_KEY_1)
-    else
-      if reg.OpenKeyReadOnly(JL_REG_PATH_2)
-         and (reg.GetDataType(JL_REG_KEY_2) = rdInteger)
-      then res := reg.ReadInteger(JL_REG_KEY_2);
-  finally
-    reg.Free;
-  end;
-
-  if (res > LB_JUMLIST_MAX_COUNT)
-  then res := LB_JUMLIST_MAX_COUNT;
-
-  Result := res;
 end;
 
 // Creates the app id resolver object
@@ -548,7 +512,7 @@ begin
     CoTaskMemFree(pName);
   end;
   CoTaskMemFree(pidl);
-  
+
   pLink.QueryInterface(IPropertyStore, pStore);
   if Assigned(pStore)
   then begin
@@ -583,6 +547,13 @@ begin
   end;
 end;
 
+function StreamRead(const AStream: IStream; const AData: Pointer; const ASize: Longint): Boolean;
+var read: Longint;
+begin
+  read := 0;
+  Result := (AStream.Read(AData, ASize, @read) = S_OK) and (ASize = read);
+end;
+
 function GetJumplist(const AAppId: PChar; AList: TJumplist; AMaxCount: Integer): Boolean;
 var id: array[0..MAX_PATH] of Char;
     crc: UInt64;
@@ -603,7 +574,7 @@ var id: array[0..MAX_PATH] of Char;
     destheader: TJumplistDestListHeader;
     pinStreams: TIntegerDynArray;
     itemheader: TJumplistDestListItemHeader;
-    seek, newpos: TLbStorageSeek;
+    seek, dummy: TLbStorageSeek;
     streamName: string;
     bReplaced: Boolean;
     hash: Cardinal;
@@ -630,7 +601,8 @@ begin
   if Succeeded( SHCreateStreamOnFile(PChar(path1), STGM_READ, pStream) )
   then begin
     {$REGION ' Read custom destinations '}
-    if Failed( pStream.Read(@customheader, SizeOf(customheader), nil) )
+    //if Failed( pStream.Read(@customheader, SizeOf(customheader), nil) )
+    if not StreamRead(pStream, @customheader, SizeOf(customheader))
     then Exit;
     AList.reserved := customheader.iReserved;
     AList.Groups.Capacity := customheader.iGroupCount + 1;
@@ -642,14 +614,16 @@ begin
     groupIdx := 1;
     while groupIdx <= customheader.iGroupCount do
     begin
-      if Failed( pStream.Read(@iType, 4, nil) )
+      //if Failed( pStream.Read(@iType, 4, nil) )
+      if not StreamRead(pStream, @iType, 4)
       then Exit;
       oGroup := AList.Groups[groupIdx];
 
       if (iType = 1)
       then begin
         // known category
-        if Failed( pStream.Read(@iType, 4, nil) )
+        //if Failed( pStream.Read(@iType, 4, nil) )
+        if not StreamRead(pStream, @iType, 4)
         then Exit;
         if (iType = 1)
         then begin
@@ -667,8 +641,10 @@ begin
       else begin
         if (iType = 0)
         then begin
-          if Failed( pStream.Read(@len, 2, nil) )
-             or Failed( pStream.Read(@str[0], len*2, nil) )
+          //if Failed( pStream.Read(@len, 2, nil) )
+          //   or Failed( pStream.Read(@str[0], len*2, nil) )
+          if (not StreamRead(pStream, @len, 2))
+             or (not StreamRead(pStream, @str[0], len*2))
           then Exit;
           str[len] := #0;
           oGroup.Name0 := str;
@@ -688,12 +664,14 @@ begin
           oGroup.eType := jgTasks;
         end;
 
-        if Failed( pStream.Read(@count, 4, nil) )
+        //if Failed( pStream.Read(@count, 4, nil) )
+        if not StreamRead(pStream, @count, 4)
         then Exit;
 
         for i := 0 to count-1 do
         begin
-          if Failed( pStream.Read(@clsid, SizeOf(clsid), nil) )
+          //if Failed( pStream.Read(@clsid, SizeOf(clsid), nil) )
+          if not StreamRead(pStream, @clsid, SizeOf(clsid))
           then Exit;
           pPersist := CreateComObject(clsid) as IPersistStream;
           if not Assigned(pPersist) or Failed( pPersist.Load(pStream) )
@@ -702,7 +680,8 @@ begin
         end;
       end;
       oGroup.Hidden := False;
-      if Failed( pStream.Read(@cookie, 4, nil) ) or (cookie <> $BABFFBAB)
+      //if Failed( pStream.Read(@cookie, 4, nil) ) or (cookie <> $BABFFBAB)
+      if (not StreamRead(pStream, @cookie, 4)) or (cookie <> $BABFFBAB)
       then Exit;
 
       Inc(groupIdx);
@@ -733,7 +712,7 @@ begin
   then begin
     if Succeeded( pStorage.OpenStream('DestList', nil, STGM_READ or STGM_SHARE_EXCLUSIVE, 0, pStream) )
     then begin
-      if Succeeded( pStream.Read(@destheader, SizeOf(destheader), nil) )
+      if StreamRead(pStream, @destheader, SizeOf(destheader))
       then begin
         SetLength(pinStreams, destheader.pinCount);
         for i := 0 to High(pinStreams) do
@@ -741,7 +720,8 @@ begin
 
         for i := 0 to destheader.count-1 do
         begin
-          if Failed( pStream.Read(@itemheader, SizeOf(itemheader), nil) )
+          //if Failed( pStream.Read(@itemheader, SizeOf(itemheader), nil) )
+          if not StreamRead(pStream, @itemheader, SizeOf(itemheader))
           then Break;
           crc := itemheader.crc;
           itemheader.crc := 0;
@@ -751,18 +731,18 @@ begin
           if IsWindows10
           then begin
             seek := 16;
-            if Failed( pStream.Seek(seek, STREAM_SEEK_CUR, newpos) )
+            if Failed( pStream.Seek(seek, STREAM_SEEK_CUR, dummy) )
             then Break;
           end;
 
-          if Failed( pStream.Read(@len, 2, nil) )
+          //if Failed( pStream.Read(@len, 2, nil) )
+          if not StreamRead(pStream, @len, 2)
           then Break;
           seek := len*2;
 
           if IsWindows10 then seek := seek + 4;
 
-          newpos := 0;
-          if Failed( pStream.Seek(seek, STREAM_SEEK_CUR, newpos) )
+          if Failed( pStream.Seek(seek, STREAM_SEEK_CUR, dummy) )
           then Break;
           if (itemheader.pinIdx >= 0) and (itemheader.pinIdx < destheader.pinCount)
           then pinStreams[itemheader.pinIdx] := itemheader.stream;
@@ -1213,12 +1193,14 @@ begin
       pinCount := 0;
       if Succeeded( pStorage.OpenStream('DestList', nil, STGM_READ or STGM_SHARE_EXCLUSIVE, 0, pStream) )
       then begin
-        if Failed( pStream.Read(@autoheader, SizeOf(autoheader), nil) )
+        //if Failed( pStream.Read(@autoheader, SizeOf(autoheader), nil) )
+        if not StreamRead(pStream, @autoheader, SizeOf(autoheader))
         then Exit;
 
         for i := 0 to autoheader.count-1 do
         begin
-          if Failed( pStream.Read(@(item.header), SizeOf(item.header), nil) )
+          //if Failed( pStream.Read(@(item.header), SizeOf(item.header), nil) )
+          if not StreamRead(pStream, @item.header, SizeOf(item.header))
           then Exit;
 
           if IsWindows10
@@ -1228,11 +1210,13 @@ begin
             then Break;
           end;
 
-          if Failed( pStream.Read(@len, 2, nil) )
+          //if Failed( pStream.Read(@len, 2, nil) )
+          if not StreamRead(pStream, @len, 2)
           then Exit;
           if (len >= Length(name))
           then Exit;
-          if Failed( pStream.Read(@name[0], len*2, nil) )
+          //if Failed( pStream.Read(@name[0], len*2, nil) )
+          if not StreamRead(pStream, @name[0], len*2)
           then Exit;
           name[len] := #0;
           item.name := name;
@@ -1405,11 +1389,8 @@ begin
         try
           reg.RootKey := HKEY_CURRENT_USER;
           if reg.OpenKeyReadOnly('Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced')
-          //   and reg.ValueExists('Start_TrackDocs')
-          //then bUsed := reg.ReadInteger('Start_TrackDocs') > 0;
-          then bUsed := ( not reg.ValueExists('Start_TrackDocs') )
-                        or ( reg.GetDataType('Start_TrackDocs') <> rdInteger )
-                        or ( reg.ReadInteger('Start_TrackDocs') > 0 );
+          then bUsed := (reg.GetDataType('Start_TrackDocs') <> rdInteger)
+                     or (reg.ReadInteger('Start_TrackDocs') > 0);
         finally
           reg.Free;
         end;

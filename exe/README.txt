@@ -8,11 +8,11 @@ Note:
 1) Linkbar support Windows Vista and above
 2) Linkbar work with .lnk, .url and .website files
 
-Version: 1.6.7
+Version: 1.6.8
 License type: Freeware
 OS: Windows Vista/7/8/8.1/10
-Languages: English (default), Chinese-Simplified, French, German, Greek, Japanese, Korean, Polish, Russian, localization support
-Email: linkbar@yandex.ru
+Languages: English (default), Сhinese-Simplified, French, German, Greek, Japanese, Korean, Polish, Russian, Spanish, localization support
+Email: linkbar@yandex.ru (use English or Russian)
 
 ===============================================================================
 
@@ -53,6 +53,25 @@ Email: linkbar@yandex.ru
 ===============================================================================
 
 == History
+===============================================================================
+
+== Version 1.6.8 general release (Mar, 2018):
+
+add: Spanish localization (Gohar)
+add: Improved Autohide behaviour
+add: Used more actual API for processing Jumplists
+add: For Windows 10 improved obtaining the taskbar color
+add: For Windows 10 option "Look"
+add: Option "Number of recent items to display in Jumplists"
+add: Option "Corners transparency width" to prevent show autohidden Linkbar
+add: Prevents hide Linkbar by Win+D when the option "Keep the Linkbar on top of other windows" disabled
+add: Saving the settings by clicking the "OK"/"Apply" button in the settings window instead of closing the application
+add: Some settings are hidden if your OS does not support them
+fix: Access violation read/write while autostart (often with 125% UI scaling)
+fix: Error "Argument out of range" while remove last item
+fix: Losed some graphics in Jumplists on Windows 8
+fix: In the settings, mouse wheel change a spinedit value on more than 1 step
+
 ===============================================================================
 
 == Version 1.6.7 general release (Dec, 2017):

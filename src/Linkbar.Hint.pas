@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.Hint;
@@ -95,7 +95,7 @@ begin
 
   Result := tr.TopLeft;
 end;
-{}
+
 procedure TTooltip32.Activate(const APos: TPoint; const AText: string;
   const AHorzAlign: TAlignment; const AVertAlign: TVerticalAlignment);
 var wr: TRect;

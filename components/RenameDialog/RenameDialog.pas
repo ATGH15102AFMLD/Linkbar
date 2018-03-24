@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit RenameDialog;
@@ -10,8 +10,9 @@ unit RenameDialog;
 interface
 
 uses
-  Winapi.Windows, System.SysUtils, System.Classes, Vcl.Controls, Vcl.Forms,
-  Vcl.StdCtrls, Winapi.CommCtrl, WinApi.Messages, Winapi.ShlObj, Winapi.ActiveX;
+  System.SysUtils, System.Classes,
+  Winapi.Windows, WinApi.Messages, Winapi.CommCtrl, Winapi.ShlObj, Winapi.ActiveX,
+  Vcl.Controls, Vcl.Forms, Vcl.StdCtrls;
 
 type
   TRenamingWCl = class(TForm)
@@ -32,6 +33,7 @@ type
     procedure CreateParams(var Params: TCreateParams); override;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
   public
+    destructor Destroy; override;
     property Pidl: PItemIDList write SetPidl;
   end;
 
@@ -39,7 +41,7 @@ implementation
 
 {$R *.dfm}
 
-uses Vcl.Clipbrd, Linkbar.Shell, Linkbar.Common, Linkbar.L10n;
+uses Vcl.Clipbrd, Linkbar.Shell, Linkbar.Common, Linkbar.L10n, Linkbar.Consts;
 
 var FInvalidFileNameChars: TCharArray;
 
@@ -54,10 +56,20 @@ begin
   Params.ExStyle := Params.ExStyle or WS_EX_APPWINDOW;
 end;
 
+destructor TRenamingWCl.Destroy;
+begin
+{$IFDEF DEBUG}
+  Assert(TWinControl(Owner) <> nil);
+{$ENDIF}
+  PostMessage(TWinControl(Owner).Handle, LM_DOAUTOHIDE, 0, 0);
+  inherited;
+end;
+
 procedure TRenamingWCl.FormCreate(Sender: TObject);
 var cue: String;
 begin
   Font.Name := Screen.IconFont.Name;
+
   L10n;
 
   ReduceSysMenu(Handle);
@@ -65,8 +77,7 @@ begin
   edtFileName.MaxLength := MAX_PATH;
 
   FInvalidFileNameChars := TCharArray.Create('"', '*', '/', ':', '<', '>', '?', '\', '|');
-  FInvalidFileNameCharsHintText :=
-    L10nMui(GetModuleHandle(LB_FN_INVALIDFILENAMECHARS), LB_RS_IFNC_HINT);
+  FInvalidFileNameCharsHintText := L10nMui(GetModuleHandle(LB_FN_INVALIDFILENAMECHARS), LB_RS_IFNC_HINT);
 
   cue := L10nMui(GetModuleHandle(LB_FN_NEEDFILENAME), LB_RS_NFN_CUE);
   f_Edit_SetCueBannerText(edtFileName.Handle, PChar(cue));
@@ -106,18 +117,20 @@ begin
   // use divide-et-impera to search AChar in AnArray
   LeftIdx := 0;
   RightIdx := Length(AnArray) - 1;
-  if (RightIdx >= 0) and (AnArray[LeftIdx] <= AChar) and (AChar <= AnArray[RightIdx]) then
-    repeat
-      MidIdx := LeftIdx + (RightIdx - LeftIdx) div 2;
-      MidChar := AnArray[MidIdx];
-      if AChar < MidChar then
-        RightIdx := MidIdx - 1
-      else
-        if AChar > MidChar then
-          LeftIdx := MidIdx + 1
-        else
-          Result := True;
-    until (Result) or (LeftIdx > RightIdx);
+  if (RightIdx >= 0)
+     and (AnArray[LeftIdx] <= AChar)
+     and (AChar <= AnArray[RightIdx])
+  then repeat
+    MidIdx := LeftIdx + (RightIdx - LeftIdx) div 2;
+    MidChar := AnArray[MidIdx];
+    if AChar < MidChar
+    then RightIdx := MidIdx - 1
+    else begin
+      if AChar > MidChar
+      then LeftIdx := MidIdx + 1
+      else Result := True;
+    end;
+  until (Result) or (LeftIdx > RightIdx);
 end;
 
 function IsValidFileNameChar(const AChar: Char): Boolean;
@@ -132,12 +145,13 @@ begin
   pname := PChar(AFileName);
   len := Length(AFileName);
   j := 0;
-  for i := 0 to len-1 do
+  for i := 0 to len - 1 do
   begin
     pname[j] := pname[i];
     if IsValidFileNameChar(pname[i])
     then Inc(j);
   end;
+  //Assert( (j >= 0) and (j <= len) );
   SetLength(AFileName, j);
   Result := j <> len;
 end;
@@ -154,7 +168,7 @@ end;
 
 procedure TRenamingWCl.edtFileNameChange(Sender: TObject);
 begin
-  btnOk.Enabled := (Trim(edtFileName.Text) <> '');
+  btnOk.Enabled := Trim(edtFileName.Text) <> '';
 end;
 
 procedure TRenamingWCl.edtFileNameKeyPress(Sender: TObject; var Key: Char);
@@ -170,7 +184,6 @@ begin
     edtFileName.SetSelText(str);
     Exit;
   end;
-
   // Other Keys
   if not IsValidFileNameChar(Key)
   then begin
@@ -178,6 +191,46 @@ begin
     ShowBalloonTip(FInvalidFileNameCharsHintText);
   end;
 end;
+
+{ Original
+
+function HasValidFileNameChars(const FileName: string): Boolean;
+var
+  PFileName: PChar;
+  FileNameLen: Integer;
+  Ch: Char;
+  I: Integer;
+begin
+  // Result will become True if an invalid file name char is found
+  I := 0;
+  PFileName := PChar(FileName);
+  FileNameLen := Length(FileName);
+  Result := False;
+  while (not Result) and (I < FileNameLen) do
+  begin
+    Ch := PFileName[I];
+    if not IsValidFileNameChar(Ch)
+    then Result := True
+    else Inc(I);
+  end;
+  Result := not Result;
+end;
+
+procedure TRenamingWCl.edtFileNameKeyPress(Sender: TObject; var Key: Char);
+begin
+  if (Key = #$16)
+  then begin
+    if Clipboard.HasFormat(CF_TEXT)
+       and HasValidFileNameChars(Clipboard.AsText)
+    then Exit;
+  end
+  else begin
+    if IsValidFileNameChar(Key)
+    then Exit;
+  end;
+  Key := #0;
+  ShowBalloonTip(FInvalidFileNameCharsHintText);
+end; }
 
 procedure TRenamingWCl.ShowBalloonTip(const AText: String);
 var ebt: TEditBalloonTip;
@@ -191,8 +244,8 @@ begin
   MessageBeep(0);
 end;
 
+{ Prevent window resizing }
 procedure TRenamingWCl.WMNCHitTest(var Message: TWMNCHitTest);
-// Disable window resize
 begin
   inherited;
   PreventSizing(Message.Result);

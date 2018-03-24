@@ -1,69 +1,122 @@
 object HotkeyEdit: THotkeyEdit
   Left = 0
   Top = 0
-  Width = 353
+  Width = 251
   Height = 22
   TabOrder = 0
   OnResize = FrameResize
   object Bevel1: TBevel
-    Left = 227
+    Left = 197
     Top = 0
-    Width = 126
+    Width = 54
     Height = 22
-    Align = alClient
+    Align = alRight
     Shape = bsSpacer
-    ExplicitLeft = 228
-    ExplicitWidth = 86
-  end
-  object chbWin: TCheckBox
-    Left = 172
-    Top = 0
-    Width = 55
-    Height = 22
-    Align = alLeft
-    Caption = 'WIN +'
-    TabOrder = 3
-    OnClick = Changed
-  end
-  object chbAlt: TCheckBox
-    Left = 121
-    Top = 0
-    Width = 51
-    Height = 22
-    Align = alLeft
-    Caption = 'ALT +'
-    TabOrder = 2
-    OnClick = Changed
-  end
-  object chbCtrl: TCheckBox
-    Left = 63
-    Top = 0
-    Width = 58
-    Height = 22
-    Align = alLeft
-    Caption = 'CTRL +'
-    TabOrder = 1
-    OnClick = Changed
-  end
-  object chbShift: TCheckBox
-    Left = 0
-    Top = 0
-    Width = 63
-    Height = 22
-    Align = alLeft
-    Caption = 'SHIFT +'
-    TabOrder = 0
-    OnClick = Changed
+    ExplicitLeft = 349
   end
   object htkKey: THotKey
-    Left = 255
+    Left = 210
     Top = 1
-    Width = 86
+    Width = 29
     Height = 21
     AutoSize = False
     HotKey = 112
     Modifiers = []
-    TabOrder = 4
+    TabOrder = 0
     OnChange = Changed
+  end
+  object pnlButtons: TPanel
+    Left = 4
+    Top = 0
+    Width = 193
+    Height = 22
+    Align = alRight
+    BevelOuter = bvNone
+    ShowCaption = False
+    TabOrder = 1
+    object Bevel2: TBevel
+      Left = 169
+      Top = 0
+      Width = 3
+      Height = 22
+      Align = alLeft
+      Shape = bsSpacer
+    end
+    object Bevel3: TBevel
+      Left = 126
+      Top = 0
+      Width = 3
+      Height = 22
+      Align = alLeft
+      Shape = bsSpacer
+    end
+    object Bevel4: TBevel
+      Left = 83
+      Top = 0
+      Width = 3
+      Height = 22
+      Align = alLeft
+      Shape = bsSpacer
+    end
+    object Bevel5: TBevel
+      Left = 40
+      Top = 0
+      Width = 3
+      Height = 22
+      Align = alLeft
+      Shape = bsSpacer
+    end
+    object btnAlt: TSpeedButton
+      Left = 86
+      Top = 0
+      Width = 40
+      Height = 22
+      Align = alLeft
+      AllowAllUp = True
+      GroupIndex = 3
+      Caption = 'Alt'
+      Flat = True
+      OnClick = btnShiftClick
+      ExplicitLeft = 56
+    end
+    object btnCtrl: TSpeedButton
+      Left = 43
+      Top = 0
+      Width = 40
+      Height = 22
+      Align = alLeft
+      AllowAllUp = True
+      GroupIndex = 2
+      Caption = 'Ctrl'
+      Flat = True
+      OnClick = btnShiftClick
+      ExplicitLeft = 16
+    end
+    object btnShift: TSpeedButton
+      Left = 0
+      Top = 0
+      Width = 40
+      Height = 22
+      Align = alLeft
+      AllowAllUp = True
+      GroupIndex = 1
+      Caption = 'Shift'
+      Flat = True
+      OnClick = btnShiftClick
+      ExplicitLeft = 35
+    end
+    object btnWin: TSpeedButton
+      Left = 129
+      Top = 0
+      Width = 40
+      Height = 22
+      Align = alLeft
+      AllowAllUp = True
+      GroupIndex = 4
+      Caption = 'Win'
+      Flat = True
+      OnClick = btnShiftClick
+      ExplicitLeft = 182
+    end
   end
 end

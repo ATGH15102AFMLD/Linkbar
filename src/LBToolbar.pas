@@ -1,17 +1,17 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit LBToolbar;
 
 {$i linkbar.inc}
 
-{;$define CHACE_BB_ICON}                                                        // chache Bit Bucket icon. However, if the user changes the icon of the Bit Bucket, this is incorrect.
-
+{;$define CHACE_BB_ICON}                                                        // Ñhache Bit Bucket icon.
+                                                                                // However, if the user changes the icon of the Bit Bucket, this is incorrect.
 interface
 
-uses Windows, SysUtils, ShlObj, Winapi.CommCtrl, Generics.Collections, Vcl.Graphics;
+uses System.SysUtils, Winapi.Windows, Winapi.ShlObj, Vcl.Graphics, Generics.Collections;
 
 type
   TLbItem = class
@@ -57,11 +57,10 @@ type
 
 implementation
 
-uses Winapi.ActiveX, Winapi.ShellAPI, System.Win.ComObj, Winapi.KnownFolders,
-     Linkbar.OS, Linkbar.Consts, Linkbar.Shell;
+uses System.Win.ComObj, Winapi.ActiveX, Winapi.ShellAPI, Winapi.KnownFolders,
+     Linkbar.OS, Linkbar.Shell;
 
-var
-  FKnownFolderManager: IKnownFolderManager;
+var FKnownFolderManager: IKnownFolderManager;
 
 function CalcFNVHashFromString(const AData: string; AHash: Cardinal = 2166136261): Cardinal; inline;
 var pData: PByte;
@@ -90,7 +89,7 @@ var hr: HRESULT;
     location: array[0..MAX_PATH] of Char;
 begin
   Result := False;
-  if Succeeded( GetUIObjectOfPidl(0, APidl, IExtractIcon, Pointer(pExtract)) )
+  if Succeeded(GetUIObjectOfPidl(0, APidl, IExtractIcon, Pointer(pExtract)))
   then begin
     index := 0;
     flags := 0;
@@ -116,7 +115,7 @@ begin
   pidl := APidl;
 
   // resolve link
-  if Succeeded( GetUIObjectOfPidl(0, APidl, IShellLink, Pointer(pLink)) )
+  if Succeeded(GetUIObjectOfPidl(0, APidl, IShellLink, Pointer(pLink)))
   then pLink.GetIDList(pidl);
   pLink := nil;
 
@@ -128,7 +127,7 @@ begin
 
   Result := Succeeded(hr)
             and Assigned(pKnownFolder)
-            and Succeeded( pKnownFolder.GetId(id) )
+            and Succeeded(pKnownFolder.GetId(id))
             and (id = FOLDERID_RecycleBinFolder);
 end;
 
@@ -170,7 +169,7 @@ begin
     FileName := AFileName;
     Hash := StrToHash(ExtractFileName(FileName));
 
-    if Succeeded( SHGetNameFromIDList(Pidl, SIGDN_NORMALDISPLAY, ppszName) )
+    if Succeeded(SHGetNameFromIDList(Pidl, SIGDN_NORMALDISPLAY, ppszName))
     then begin
       Caption := String(ppszName);
       CoTaskMemFree(ppszName);
@@ -269,16 +268,16 @@ function LoadIconFromPidl(APidl: PItemIDList; AIconSize: Integer): HBITMAP;
 var hbmp: HBITMAP;
     hr: HRESULT;
     fileShellItemImage: IShellItemImageFactory;
-    NeedUninitialize: Boolean;
+    needUninitialize: Boolean;
 begin
   Result := 0;
-  NeedUninitialize := SUCCEEDED(CoInitializeEx(nil, COINIT_APARTMENTTHREADED or COINIT_DISABLE_OLE1DDE));
+  needUninitialize := Succeeded(CoInitializeEx(nil, COINIT_APARTMENTTHREADED or COINIT_DISABLE_OLE1DDE));
   try
     hr := SHCreateItemFromIDList(APidl, IShellItemImageFactory, fileShellItemImage);
-    if Succeeded(hr) then
-    begin
+    if Succeeded(hr)
+    then begin
       hr := fileShellItemImage.GetImage(TSize.Create(AIconSize, AIconSize),
-        SIIGBF_ICONONLY, hbmp);
+        SIIGBF_ICONONLY or SIIGBF_BIGGERSIZEOK, hbmp);
       if Succeeded(hr)
       then begin
         // Bitmaps for Windows 8.1/10 require premultiply
@@ -289,7 +288,7 @@ begin
       fileShellItemImage := nil;
     end;
   finally
-    if NeedUninitialize
+    if needUninitialize
     then CoUninitialize;
   end;
 end;
@@ -344,8 +343,10 @@ end;
 var item: TLbItem;
 begin
   for item in Self do
+  begin
     if item.BitBucket
     then LoadIcon(item);
+  end;
 end;
 {$endif}
 
@@ -354,7 +355,8 @@ var dc: HDC;
     sii: TSHStockIconInfo;
     item: TLbItem;
 begin
-  if (FIconSize = AValue) then Exit;
+  if (FIconSize = AValue)
+  then Exit;
   FIconSize := AValue;
 
   { Add shield overlay icon }
@@ -403,18 +405,19 @@ begin
     bmp0 := SelectObject(dc, item.HBmp);
 
   // Draw icon
-  Windows.AlphaBlend(AHdc, AX, AY, FIconSize, FIconSize, dc,
+  Winapi.Windows.AlphaBlend(AHdc, AX, AY, FIconSize, FIconSize, dc,
     0, 0, FIconSize, FIconSize, bf);
+  SelectObject(dc, bmp0);
 
   // Draw shield
   if (item.Shield)
   then begin
-    SelectObject(dc, HBmpShield);
-    Windows.AlphaBlend(AHdc, AX, AY, FIconSize, FIconSize, dc,
+    bmp0 := SelectObject(dc, HBmpShield);
+    Winapi.Windows.AlphaBlend(AHdc, AX, AY, FIconSize, FIconSize, dc,
       0, 0, FIconSize, FIconSize, bf);
+    SelectObject(dc, bmp0);
   end;
 
-  SelectObject(dc, bmp0);
   DeleteDC(dc);
 end;
 
@@ -437,19 +440,20 @@ begin
     repeat
       while SortCompareLogical(Self, I, P) < 0 do Inc(I);
       while SortCompareLogical(Self, J, P) > 0 do Dec(J);
-      if I <= J then
-      begin
-        if I <> J then
-          Self.Exchange(I, J);
-        if P = I then
-          P := J
-        else if P = J then
-          P := I;
+      if (I <= J)
+      then begin
+        if (I <> J)
+        then Self.Exchange(I, J);
+        if (P = I)
+        then P := J
+        else if (P = J)
+             then P := I;
         Inc(I);
         Dec(J);
       end;
     until I > J;
-    if L < J then QuickSort(L, J);
+    if (L < J)
+    then QuickSort(L, J);
     L := I;
   until I >= R;
 end;

@@ -4,7 +4,6 @@ object LinkbarWcl: TLinkbarWcl
   ClientHeight = 68
   ClientWidth = 365
   Color = clBtnFace
-  DefaultMonitor = dmMainForm
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -13
@@ -21,6 +20,7 @@ object LinkbarWcl: TLinkbarWcl
   OnMouseLeave = FormMouseLeave
   OnMouseMove = FormMouseMove
   OnMouseUp = FormMouseUp
+  OnResize = FormResize
   PixelsPerInch = 96
   TextHeight = 16
   object pMenu: TPopupMenu
@@ -35,7 +35,7 @@ object LinkbarWcl: TLinkbarWcl
       GroupIndex = 2
       OnClick = imOpenWorkdirClick
     end
-    object N1: TMenuItem
+    object N2: TMenuItem
       Caption = '-'
       GroupIndex = 2
     end
@@ -45,11 +45,11 @@ object LinkbarWcl: TLinkbarWcl
       OnClick = imAddBarClick
     end
     object imRemoveBar: TMenuItem
-      Caption = 'Delete the linkbar'
+      Caption = 'Delete the linkbar...'
       GroupIndex = 2
       OnClick = imRemoveBarClick
     end
-    object N2: TMenuItem
+    object N1: TMenuItem
       Caption = '-'
       GroupIndex = 2
     end
@@ -65,7 +65,7 @@ object LinkbarWcl: TLinkbarWcl
       OnClick = imSortAlphabetClick
     end
     object imProperties: TMenuItem
-      Caption = 'Properties'
+      Caption = 'Settings...'
       GroupIndex = 2
       OnClick = imPropertiesClick
     end

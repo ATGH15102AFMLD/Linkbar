@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit AccessBar;
@@ -50,9 +50,10 @@ type
     FStayOnTop: Boolean;
     // special form for autohide
     ahform: THiddenForm;
-    FTaskbarCreated: UINT;
-    procedure SetAutoHide(const AValue: boolean);
-    procedure SetSide(const AValue: TScreenAlign);
+    FTaskbarCreated: DWORD;
+    procedure SetAutoHide(AValue: boolean);
+    procedure SetSide(AValue: TScreenAlign);
+    procedure SetStayOnTop(AValue: Boolean);
     procedure AppBWndProc(var Msg: TMessage);
     function GetIsVertical: boolean;
   protected
@@ -71,7 +72,7 @@ type
     procedure AppBarPosChanged;
     procedure AppBarFullScreenApp(AEnabled: Boolean);
   published
-    property StayOnTop: Boolean read FStayOnTop write FStayOnTop;
+    property StayOnTop: Boolean read FStayOnTop write SetStayOnTop;
     property AutoHide: boolean read FAutoHide write SetAutoHide;
     property Side: TScreenAlign read FSide write SetSide default saTop;
     property QuerySizing: TQuerySizingEvent read FQuerySizing write FQuerySizing;
@@ -87,9 +88,9 @@ implementation
 uses Types, Math, Linkbar.L10n;
 
 const
-  APPBAR_CALLBACK       =  WM_USER + 1;
-  APPBAR_FULLSCREENAPP  =  WM_USER + 2;
-  APPBAR_TASKBARSTARTED =  WM_USER + 3;
+  LM_AB_CALLBACK       =  WM_USER + 1;
+  LM_AB_FULLSCREENAPP  =  WM_USER + 2;
+  LM_AB_TASKBARSTARTED =  WM_USER + 3;
 
   // Multi Monitor support, introduced in Windows 8
   ABM_GETAUTOHIDEBAREX = $0000000b;
@@ -98,6 +99,18 @@ const
 procedure ChangeWindowMessageFilterEx(const AWnd: HWND; const AMessage: UINT);
 const MSGFLT_ALLOW = 1;
 type
+{$REGION '  Original from msdn '}
+(* BOOL WINAPI ChangeWindowMessageFilterEx(
+  _In_        HWND                hWnd,
+  _In_        UINT                message,
+  _In_        DWORD               action,
+  _Inout_opt_ PCHANGEFILTERSTRUCT pChangeFilterStruct
+);
+typedef struct tagCHANGEFILTERSTRUCT {
+  DWORD cbSize;
+  DWORD ExtStatus;
+} CHANGEFILTERSTRUCT, *PCHANGEFILTERSTRUCT; *)
+{$ENDREGION}
   CHANGEFILTERSTRUCT = packed record
     cbSize: DWORD;
     ExtStatus: DWORD;
@@ -158,7 +171,7 @@ begin
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize := SizeOf(rabd);
   rabd.hWnd := Self.Handle;
-  rabd.uCallbackMessage := APPBAR_CALLBACK;
+  rabd.uCallbackMessage := LM_AB_CALLBACK;
   FAccessHandle := 0;
   if SHAppBarMessage(ABM_NEW, rabd) = 0
   then raise Exception.Create(SysErrorMessage(GetLastError()));
@@ -203,10 +216,10 @@ end;
 
 procedure THiddenForm.WndProc(var Msg: TMessage);
 begin
-  if Msg.Msg = APPBAR_CALLBACK
+  if Msg.Msg = LM_AB_CALLBACK
   then begin
     if (Msg.wParam = ABN_FULLSCREENAPP) and IsWindow(FAccessHandle)
-    then SendMessage(FAccessHandle, APPBAR_FULLSCREENAPP, 0, Msg.lParam);
+    then SendMessage(FAccessHandle, LM_AB_FULLSCREENAPP, 0, Msg.lParam);
   end
   else inherited WndProc(Msg);
 end;
@@ -221,10 +234,15 @@ var rabd: TAppBarData;
 begin
   if gABRegistered then exit;
 
+  // make sure we get the notification messages
+  // NOTE: moved to constructor
+  //FOwnerOriginalWndProc := TWinControl(Owner).WindowProc;
+  //TWinControl(Owner).WindowProc := AppBWndProc;
+
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize:= SizeOf(rabd);
   rabd.hWnd := FHandle;
-  rabd.uCallbackMessage:= APPBAR_CALLBACK;
+  rabd.uCallbackMessage:= LM_AB_CALLBACK;
   // register the application bar within the system
   if SHAppBarMessage(ABM_NEW, rabd) = 0
   then raise Exception.Create(SysErrorMessage(GetLastError()));
@@ -236,6 +254,11 @@ procedure TAccessBar.UnregisterAppBar;
 var rabd: TAppBarData;
 begin
   if not gABRegistered then exit;
+
+  // check if the form is not being destroyed
+  // NOTE: moved to destructor
+  //if not (csDestroying in ComponentState)
+  //then TWinControl(Owner).WindowProc := FOwnerOriginalWndProc;
 
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize:= SizeOf(rabd);
@@ -320,6 +343,8 @@ var
   iHeight, iWidth: Integer;
   rabd: TAppBarData;
 begin
+  //if (csDesigning in ComponentState) then Exit;
+
   if not InRange(MonitorNum, 0, Screen.MonitorCount-1)
   then MonitorNum := Screen.PrimaryMonitor.MonitorNum;
 
@@ -374,7 +399,7 @@ begin
   then ahform.SetMonitor(MonitorNum);
 end;
 
-procedure TAccessBar.SetSide(const AValue: TScreenAlign);
+procedure TAccessBar.SetSide(AValue: TScreenAlign);
 var  rabd: TAppBarData;
      hr: Cardinal;
 begin
@@ -393,7 +418,7 @@ begin
       hr := SHAppBarMessage(ABM_SETAUTOHIDEBAREX, rabd);
     end
     else begin
-      hr := SHAppBarMessage(ABM_SETAUTOHIDEBAR, rabd);  
+      hr := SHAppBarMessage(ABM_SETAUTOHIDEBAR, rabd);
     end;
     if hr = 0
     then raise Exception.Create(SysErrorMessage(GetLastError()));
@@ -406,10 +431,22 @@ begin
   else AppBarQuerySetPos;
 end;
 
-procedure TAccessBar.SetAutoHide(const AValue: boolean);
+procedure TAccessBar.SetAutoHide(AValue: boolean);
 begin
   if FAutoHide = AValue then exit;
   AppBarSetAutoHide(AValue);
+end;
+
+procedure TAccessBar.SetStayOnTop(AValue: Boolean);
+var desktop: HWND;
+begin
+  FStayOnTop := AValue;
+  // Set Desktop window as Parent for prevent hide Linkbar by "Show desktop"
+  // if "Always on Top" disabled
+  if (FStayOnTop)
+  then desktop := 0
+  else desktop := FindWindowEx(FindWindow('Progman', 'Program Manager'), 0, 'SHELLDLL_DefView', '');
+  SetWindowLong(FHandle, GWL_HWNDPARENT, desktop);
 end;
 
 function TAccessBar.GetIsVertical: boolean;
@@ -421,9 +458,8 @@ procedure TAccessBar.AppBWndProc(var Msg: TMessage);
 var rabd: TAppBarData;
 begin
   case Msg.Msg of
-    APPBAR_TASKBARSTARTED:
+    LM_AB_TASKBARSTARTED:
       begin
-        // TODO: Check logic
         if (AutoHide)
         then
           SetSide(FSide)
@@ -431,19 +467,23 @@ begin
           UnregisterAppBar;
           RegisterAppBar;
         end;
+        StayOnTop := FStayOnTop;
+        Exit;
       end;
-    APPBAR_FULLSCREENAPP:
+    LM_AB_FULLSCREENAPP:
       begin
         Self.AppBarFullScreenApp(Msg.LParam <> 0);
+        Exit;
       end;
-    APPBAR_CALLBACK:
+    LM_AB_CALLBACK:
       begin
         case Msg.wParam of
           ABN_STATECHANGE, ABN_POSCHANGED:
             AppBarQuerySetPos;
         end;
+        Exit;
       end;
-    WM_WINDOWPOSCHANGED :
+    WM_WINDOWPOSCHANGED:
       begin
         FillChar(rabd, SizeOf(rabd), 0);
         rabd.cbSize := SizeOf(rabd);
@@ -456,11 +496,14 @@ begin
         rabd.cbSize := SizeOf(rabd);
         rabd.hWnd := FHandle;
         SHAppBarMessage(ABM_ACTIVATE, rabd);
-        inherited;
+        //inherited;
       end;
     else begin
       if (Msg.Msg = FTaskbarCreated)
-      then PostMessage(FHandle, APPBAR_TASKBARSTARTED, 0, 0);
+      then begin
+        PostMessage(FHandle, LM_AB_TASKBARSTARTED, 0, 0);
+        Exit;
+      end;
     end;
   end;
   // call the original WndProc
@@ -473,6 +516,8 @@ var
   rabd: TAppBarData;
   hr: Cardinal;
 begin
+  //if (csDesigning in ComponentState) then Exit;
+
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize := SizeOf(rabd);
   rabd.hWnd := FHandle;
@@ -487,9 +532,9 @@ begin
     hr := SHAppBarMessage(ABM_SETAUTOHIDEBAREX, rabd);
   end
   else begin
-    hr := SHAppBarMessage(ABM_SETAUTOHIDEBAR, rabd);  
+    hr := SHAppBarMessage(ABM_SETAUTOHIDEBAR, rabd);
   end;
-  
+
   if AEnabled and (hr <> 0)
   then begin
     FAutoHide := TRUE;

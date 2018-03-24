@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.L10n;
@@ -18,7 +18,7 @@ const
   // New shortcut file name
   // shell32.dll.mui - String table - ?
   LB_FN_NEWSHORTCUT  = 'shell32.dll';
-  LB_RS_NSC_FILENAME = 30397;
+	LB_RS_NSC_FILENAME = 30397;
 
   // Autohide fail message
   // explorerframe.dll.mui
@@ -35,8 +35,9 @@ const
   LB_FN_NEEDFILENAME = 'shell32.dll';
   LB_RS_NFN_CUE = 4123;
 
-  procedure L10nLoad(const APath: string; AForcedLocale: string = '');
-  function  L10NFind(const AName: string; ADefault: string = ''): string;
+
+  procedure L10nLoad(const APath: string; const AForcedLocale: string = '');
+  function  L10NFind(const AName: string; const ADefault: string = ''): string;
   function  L10nMui(const AModuleName: String; const AStringID: Cardinal): String; overload;
   function  L10nMui(const AModule: HINST; const AStringID: Cardinal): String; overload;
   procedure L10nControl(AControl: TForm;        const AName: String); overload;
@@ -49,12 +50,11 @@ const
   procedure L10nControl(AControl: TComboBox;    const ANames: array of String); overload;
 
 var
-  LbLongLang: Boolean = True deprecated;
   Locale: string = '';
 
 implementation
 
-uses
+ uses
   System.SysUtils, System.Types, System.StrUtils, System.Generics.Collections;
 
 type
@@ -77,7 +77,8 @@ type
 function L10nMui(const AModule: HINST; const AStringID: Cardinal): String;
 var p: PChar;
 begin
-  if (AModule <> 0) and (AStringID < 65536)
+  if (AModule <> 0)
+     and (AStringID < 65536)
   then SetString(Result, p, LoadString(AModule, AStringID, @p, 0))
   else Result := 'resource_string_not_found';
 end;
@@ -143,9 +144,8 @@ var FTranslations: TTranslations;
 
 function Translations: TTranslations;
 begin
-  if FTranslations = nil then
-    FTranslations := TTranslations.Create;
-
+  if (FTranslations = nil)
+  then FTranslations := TTranslations.Create;
   Result := FTranslations;
 end;
 
@@ -200,7 +200,8 @@ begin
       then begin
         key := LowerCase( Trim( Copy(s, 1, j - 1) ) );
         value := TrimLeft( Copy(s, j + 1, Length(s)) );
-        if (key <> '') and (value <> '')
+        if (key <> '')
+           and (value <> '')
         then tr.AddOrSetValue(key, value);
       end;
     end;
@@ -249,7 +250,7 @@ begin
   then Result := Languages.LocaleName[i];
 end;
 
-procedure L10nLoad(const APath: string; AForcedLocale: string = '');
+procedure L10nLoad(const APath: string; const AForcedLocale: string = '');
 var languages: string;
     localeId: Integer;
 begin
@@ -269,9 +270,13 @@ begin
   Translations.LoadFromPath(APath, languages);
 end;
 
-function L10NFind(const AName: string; ADefault: string = ''): string;
+function L10NFind(const AName: string; const ADefault: string = ''): string;
 begin
   Result := Translations.Find(AName, ADefault);
+  // Prevent exception in Format()
+  if (Pos('%s', ADefault) > 0)
+     and (Pos('%s', AnsiLowerCase(Result)) = 0)
+  then Result := ADefault;
 end;
 
 end.

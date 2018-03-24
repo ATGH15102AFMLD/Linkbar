@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.Undoc;
@@ -10,11 +10,11 @@ unit Linkbar.Undoc;
 interface
 
 uses
-  Windows, SysUtils;
+  Winapi.Windows, System.SysUtils;
 
 const
-  U_WCA_CLIENTRENDERING_POLICY_WIN7   = 16;
-  U_WCA_CLIENTRENDERING_POLICY_WIN8   = 15;
+  U_WCA_CLIENTRENDERING_POLICY_WIN7 = 16;
+  U_WCA_CLIENTRENDERING_POLICY_WIN8 = 15;
 
   // Windows 10 AeroGlass
   U_WCA_ACCENT_POLICY = 19;
@@ -26,6 +26,7 @@ const
 	U_WCA_ACCENT_STATE_INVALID_STATE = 4;
 
   U_WCA_ACCENT_FLAG_DEFAULT = 0;
+  U_WCA_ACCENT_FLAG_DRAW_ALL = $13;
   U_WCA_ACCENT_FLAG_DRAW_LEFT_BORDER = $20;
   U_WCA_ACCENT_FLAG_DRAW_TOP_BORDER = $40;
   U_WCA_ACCENT_FLAG_DRAW_RIGHT_BORDER = $80;
@@ -33,18 +34,19 @@ const
 
 type
   tagCOLORIZATIONPARAMS = record
-    clrColor        : COLORREF;  //ColorizationColor
-    clrAftGlow      : COLORREF;  //ColorizationAfterglow
-    nIntensity      : UINT;      //ColorizationColorBalance -> 0-100
-    clrAftGlowBal   : UINT;      //ColorizationAfterglowBalance
-    clrBlurBal      : UINT;      //ColorizationBlurBalance
-    clrGlassReflInt : UINT;      //ColorizationGlassReflectionIntensity
-    fOpaque         : BOOL;
+    Color: COLORREF;
+    Afterglow: COLORREF;
+    ColorBalance: UINT;
+    AfterglowBalance: UINT;
+    BlurBalance: UINT;
+    GlassReflectionIntensity: UINT;
+    OpaqueBlend: DWORD; // BOOL
+    Extra: DWORD; // Win8 has extra parameter
   end;
   TColorizationParams = tagCOLORIZATIONPARAMS;
   PColorizationParams = ^TColorizationParams;
 
-  TDwmGetColorizationParameters = procedure(out parameters: TColorizationParams); stdcall;
+  TDwmGetColorizationParameters = function(out parameters: TColorizationParams): HRESULT; stdcall;
 
   // http://a-whiter.livejournal.com/1385.html
   // http://undoc.airesoft.co.uk/user32.dll/SetWindowCompositionAttribute.php
@@ -56,56 +58,67 @@ type
   TWcaData = tagWCADATA;
   PWcaData = ^TWcaData;
 
-
   tagACCENTPOLICY = packed record
     AccentState: Integer;
     AccentFlags: Integer;
-    GradientColor: Integer;
+    GradientColor: COLORREF;
     AnimationId: Integer;
   end;
   TWcaAccentPolicy = tagACCENTPOLICY;
   PWcaAccentPolicy = ^TWcaAccentPolicy;
 
-  TDwmSetWindowCompositionAttribute = function(hwnd: HWND;
-    pAttrData: PWcaData): BOOL; stdcall;
+  TDwmSetWindowCompositionAttribute = function(hwnd: HWND; pAttrData: PWcaData): BOOL; stdcall;
+
+  // Get Metro Colors
+  TGetImmersiveUserColorSetPreference = function(bForceCheckRegistry: BOOL; bSkipCheckOnFail: BOOL): Integer; stdcall;
+  TGetImmersiveColorTypeFromName = function(const pName: PChar): Integer; stdcall;
+  TGetImmersiveColorFromColorSetEx = function(dwImmersiveColorSet: UINT; dwImmersiveColorType: UINT; bIgnoreHighContrast: BOOL; dwHighContrastCacheMode: UINT): COLORREF; stdcall;
 
 var
   UDwmGetColorizationParametersProc: TDwmGetColorizationParameters = nil;
   UDwmSetWindowCompositionAttributeProc: TDwmSetWindowCompositionAttribute = nil;
+  //
+  UGetImmersiveUserColorSetPreferenceProc: TGetImmersiveUserColorSetPreference = nil;
+  UGetImmersiveColorTypeFromNameProc: TGetImmersiveColorTypeFromName = nil;
+  UGetImmersiveColorFromColorSetExProc: TGetImmersiveColorFromColorSetEx = nil;
 
 implementation
 
-const
-  lnDwmApi = 'DWMAPI.DLL';
-  NameDwmGetColorizationParameters = 127;
-
-  lnUser32 = 'USER32.DLL';
-  NameSetWindowCompositionAttribute = 'SetWindowCompositionAttribute';
-  NameUpdateLayeredWindowIndirect = 'UpdateLayeredWindowIndirect';
+uses Linkbar.OS;
 
 function LoadUndocFunctions: boolean;
-var
-  hDwmApi: THandle;
-  hUser32: THandle;
+var hlib: THandle;
 begin
   // dwmapi.dll
-  hDwmApi := GetModuleHandle(lnDwmApi);
-  if (hDwmApi >= 32)
+  hlib := GetModuleHandle('DWMAPI.DLL');
+  if (hlib <> 0)
   then begin
-    @UDwmGetColorizationParametersProc := GetProcAddress( hDwmApi,
-      LPCSTR(NameDwmGetColorizationParameters) );
+    @UDwmGetColorizationParametersProc := GetProcAddress(hlib, LPCSTR(127));
   end;
 
   // user32.dll
-  hUser32 := GetModuleHandle(lnUser32);
-  if (hUser32 >= 32)
+  hlib := GetModuleHandle('USER32.DLL');
+  if (hlib <> 0)
   then begin
-    @UDwmSetWindowCompositionAttributeProc := GetProcAddress( hUser32,
-      LPCSTR(NameSetWindowCompositionAttribute) );
+    @UDwmSetWindowCompositionAttributeProc := GetProcAddress(hlib, LPCSTR('SetWindowCompositionAttribute'));
   end;
 
-  Result := Assigned(UDwmGetColorizationParametersProc)
-    and Assigned(UDwmSetWindowCompositionAttributeProc);
+  // uxtheme.dll
+  if IsWindows10OrAbove
+  then begin
+    hlib := GetModuleHandle('UXTHEME.DLL');
+    if (hlib <> 0)
+       //and (GetModuleVersion(hlib) >= $6020000)
+    then begin
+      @UGetImmersiveColorFromColorSetExProc := GetProcAddress(hlib, LPCSTR(95));
+      @UGetImmersiveColorTypeFromNameProc := GetProcAddress(hlib, LPCSTR(96));
+      if Assigned(UGetImmersiveColorFromColorSetExProc)
+         and Assigned(UGetImmersiveColorTypeFromNameProc)
+      then @UGetImmersiveUserColorSetPreferenceProc := GetProcAddress(hlib, LPCSTR(98));
+    end;
+  end;
+
+  Result := True;
 end;
 
 initialization

@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit mUnit;
@@ -10,14 +10,14 @@ unit mUnit;
 interface
 
 uses
-  GdiPlus, GdiPlusHelpers,
+  GdiPlus,
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms,
-  System.UITypes, IniFiles, Menus, Vcl.ExtCtrls, Winapi.ShlObj,
+  System.UITypes, Menus, Vcl.ExtCtrls, Winapi.ShlObj,
   DDForms, Cromis.DirectoryWatch,
-  AccessBar, LBToolbar, Linkbar.Consts, Linkbar.Hint, Linkbar.Taskbar, HotKey;
+  AccessBar, LBToolbar, Linkbar.Consts, Linkbar.Hint, Linkbar.Taskbar, HotKey,
+  Linkbar.Graphics;
 
 type
-
   TLinkbarWcl = class(TLinkbarCustomFrom)
     pMenu: TPopupMenu;
     imClose: TMenuItem;
@@ -55,16 +55,18 @@ type
       var Handled: Boolean);
     procedure imSortAlphabetClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormResize(Sender: TObject);
   private
-    CBmpSelectedItem: TBitmap;
-    CBmpDropPosition: TBitmap;
-    BmpBtn: TBitmap;
-    BmpMain: TBitmap;
+    CBmpSelectedItem: THBitmap;
+    CBmpDropPosition: THBitmap;
+    BmpBtn: THBitmap;
+    BmpMain: THBitmap;
     Items: TLBItemList;
     oAppBar : TAccessBar;
     oHint: TTooltip32;
+    FCreated: Boolean;
     FHotIndex: Integer;
-    FItemPressed: Integer;
+    FPressedIndex: Integer;
     FMousePosDown: TPoint;
     FMousePosUp: TPoint;
     FMouseLeftDown: Boolean;
@@ -77,29 +79,32 @@ type
     FAutoShowMode: TAutoShowMode;
     FButtonSize: TSize;
     FButtonCenter: TPoint;
+    FEnableAeroGlass: Boolean;
     FGripSize: Integer;
     FHintShow: Boolean;
     FHotkeyInfo: THotkeyInfo;
-    FHotkeyPressed: Boolean;
     FItemMargin: TSize;
     FIconSize: Integer;
     FIsLightStyle: Boolean;
     FItemOrder: TItemOrder;
     FJumplistShowMode: TJumplistShowMode;
+    FJumplistRecentMax: Integer;
+    FLookMode: TLookMode;
     FLockLinkbar: Boolean;
     FLockHotIndex: Boolean;
+    FCorner1GapWidth, FCorner2GapWidth: Integer;
     FSortAlphabetically: Boolean;
     FStayOnTop: Boolean;
-    FBkgColor: Cardinal;
-    FTxtColor: Cardinal;
-    FUseBkgColor: Boolean;
-    FUseTxtColor: Boolean;
+    FBackgroundColor: Cardinal;
+    FSysBackgroundColor: Cardinal;
+    FTextColor: Cardinal;
+    FUseBkgndColor: Boolean;
+    FUseTextColor: Boolean;
     FGlowSize: Integer;
     FScreenEdge: TScreenAlign;
     FTextWidth: Integer;
     FTextOffset: Integer;
     FTextLayout: TTextLayout;
-    FTextHeight: Integer;
     FIconOffset: TPoint;
     FTextRect: TRect;
     IconsInLine, IconLinesCount: integer;
@@ -107,6 +112,7 @@ type
     procedure UpdateWindowSize;
     procedure SetScreenAlign(AValue: TScreenAlign);
     procedure SetAutoHide(AValue: Boolean);
+    procedure SetEnableAeroGlass(AValue: Boolean);
     procedure SetItemOrder(AValue: TItemOrder);
     procedure SetPressedIndex(AValue: integer);
     procedure SetHotIndex(AValue: integer);
@@ -120,30 +126,36 @@ type
     procedure SetTextWidth(AValue: Integer);
     procedure SetSortAlphabetically(AValue: Boolean);
     procedure SetStayOnTop(AValue: Boolean);
+    procedure SetLookMode(AValue: TLookMode);
+    procedure SetUseBkgndColor(AValue: Boolean);
     function GetScreenAlign: TScreenAlign;
-    procedure DrawBackground(const ABitmap: TBitmap; const AClipRect: TRect);
-    procedure DrawCaption(const ABitmap: TBitmap; const AIndex: Integer;
+    procedure DrawBackground(const ABitmap: THBitmap; const AClipRect: TRect);
+    procedure DrawCaption(const ABitmap: THBitmap; const AIndex: Integer;
       const ADrawForDrag: Boolean = False);
-    procedure DrawItem(ABitmap: TBitmap; AIndex: integer; ASelected,
+    procedure DrawItem(ABitmap: THBitmap; AIndex: integer; ASelected,
       APressed: Boolean; ADrawBg: Boolean = True; ADrawForDrag: Boolean = False);
     procedure DrawItems;
     procedure RecreateMainBitmap(const AWidth, AHeight: integer);
     procedure RecreateButtonBitmap(const AWidth, AHeight: integer);
     procedure UpdateWindow(const AWnd: HWND; const ABounds: TRect;
-      const AScreenEdge: TScreenAlign; const ABitmap: TBitmap);
+      const AScreenEdge: TScreenAlign; const ABitmap: THBitmap);
     procedure UpdateBlur;
+    procedure UpdateBackgroundColor;
+    function GetBackgroundColor: Cardinal;
     function ItemIndexByPoint(const APt: TPoint;
       const ALastIndex: integer = ITEM_NONE): Integer;
     function CheckItem(AIndex: Integer): Boolean;
+    procedure DeleteItem(const AIndex: Integer);
     function ScaleDimension(const X: Integer): Integer; inline;
   private
     procedure L10n;
-    procedure LoadProperties(const AFileName: string);
-    procedure SaveProperties;
+    procedure LoadSettings;
+    procedure SaveLinks;
   private
     BitBucketNotify: Cardinal;
     procedure UpdateBitBuckets;
   private
+    FRemoved: boolean;
     FDragScreenEdge: TScreenAlign;
     FMonitorNum: Integer;
     FDragMonitorNum: Integer;
@@ -153,6 +165,7 @@ type
     procedure DoExecuteItem(const AIndex: Integer);
     procedure DoClickItem(X, Y: Integer);
     procedure DoRenameItem(AIndex: Integer);
+    procedure DoPopupMenuItemExecute(const ACmd: Integer);
     procedure DoDragLinkbar(X, Y: Integer);
     procedure DoPopupMenu(APt: TPoint; AShift: Boolean);
     procedure DoPopupJumplist(APt: TPoint; AShift: Boolean);
@@ -163,9 +176,7 @@ type
     procedure QuerySizedEvent(Sender: TObject; const AX, AY, AWidth, AHeight: Integer);
     procedure QueryHideEvent(Sender: TObject; AEnabled: boolean);
     function IsItemIndex(const AIndex: Integer): Boolean;
-  private
-    FRemoved: boolean;
-    procedure DoPopupMenuItemExecute(const ACmd: Integer);
+    procedure CreateBitmaps;
   protected
     // Drag&Drop functions
     FItemDropPosition: Integer;
@@ -175,7 +186,7 @@ type
     procedure DoDragOver(const pt: TPoint; var ppidl: PItemIDList); override;
     procedure DoDragLeave; override;
     procedure DoDrop(const pt: TPoint); override;
-    procedure QueryDragImage(out ABitmap: TBitmap; out AOffset: TPoint); override;
+    procedure QueryDragImage(out ABitmap: THBitmap; out AOffset: TPoint); override;
   protected
     // Dir watch
     procedure DirWatchChange(const Sender: TObject; const AAction: TWatchAction;
@@ -198,82 +209,65 @@ type
     procedure DoAutoHide;
     procedure DoAutoShow;
     procedure DoDelayedAutoShow;
+    procedure DoDelayedAutoHide(const ADelay: Cardinal);
     procedure OnFormJumplistDestroy(Sender: TObject);
   public
+    procedure SaveSettings;
     procedure UpdateItemSizes;
-    procedure PropertiesFormDestroyed;
     property AutoHide: Boolean read FAutoHide write SetAutoHide;
     property AutoHideTransparency: Boolean read FAutoHideTransparency write FAutoHideTransparency;
+    property AutoShowDelay: Integer read FAutoShowDelay write FAutoShowDelay;
     property AutoShowMode: TAutoShowMode read FAutoShowMode write FAutoShowMode;
+    property BackgroundColor: Cardinal read GetBackgroundColor write FBackgroundColor;
     property ButtonSize: TSize read FButtonSize write SetButtonSize;
+    property EnableAeroGlass: Boolean read FEnableAeroGlass write SetEnableAeroGlass;
+    property GlowSize: Integer read FGlowSize write FGlowSize;
+    property HintShow: Boolean read FHintShow write FHintShow;
+    property HotIndex: Integer read FHotIndex write SetHotIndex;
     property HotkeyInfo: THotkeyInfo read FHotkeyInfo write SetHotkeyInfo;
-    property ItemMargin: TSize read FItemMargin write SetItemMargin;
     property IconSize: Integer read FIconSize write SetIconSize;
     property IsLightStyle: Boolean read FIsLightStyle write SetIsLightStyle;
+    property ItemMargin: TSize read FItemMargin write SetItemMargin;
     property ItemOrder: TItemOrder read FItemOrder write SetItemOrder;
     property JumplistShowMode: TJumplistShowMode read FJumplistShowMode write FJumplistShowMode;
+    property JumplistRecentMax: Integer read FJumplistRecentMax write FJumplistRecentMax;
+    property LookMode: TLookMode read FLookMode write SetLookMode;
+    property PressedIndex: Integer read FPressedIndex write SetPressedIndex;
+    property ScreenAlign: TScreenAlign read GetScreenAlign  write SetScreenAlign;
+    property SortAlphabetically: Boolean read FSortAlphabetically write SetSortAlphabetically;
+    property StayOnTop: Boolean read FStayOnTop write SetStayOnTop default True;
     property TextLayout: TTextLayout read FTextLayout write SetTextLayout;
     property TextOffset: Integer read FTextOffset write SetTextOffset;
     property TextWidth: Integer read FTextWidth write SetTextWidth;
-    property HintShow: Boolean read FHintShow write FHintShow;
-    property AutoShowDelay: Integer read FAutoShowDelay write FAutoShowDelay;
-    property PressedIndex: Integer read FItemPressed write SetPressedIndex;
-    property HotIndex: Integer read FHotIndex write SetHotIndex;
-    property ScreenAlign: TScreenAlign read GetScreenAlign write SetScreenAlign;
-    property SortAlphabetically: Boolean read FSortAlphabetically write SetSortAlphabetically;
-    property BkgColor: Cardinal read FBkgColor write FBkgColor;
-    property TxtColor: Cardinal read FTxtColor write FTxtColor;
-    property UseBkgColor: Boolean read FUseBkgColor write FUseBkgColor;
-    property UseTxtColor: Boolean read FUseTxtColor write FUseTxtColor;
-    property GlowSize: Integer read FGlowSize write FGlowSize;
-    property StayOnTop: Boolean read FStayOnTop write SetStayOnTop;
-  private
-    FEnableAeroGlass: Boolean;
-    procedure SetEnableAeroGlass(AValue: Boolean);
-  public
-    property EnableAeroGlass: Boolean read FEnableAeroGlass write SetEnableAeroGlass;
+    property TextColor: Cardinal read FTextColor write FTextColor;
+    property UseBkgndColor: Boolean read FUseBkgndColor write SetUseBkgndColor;
+    property UseTextColor: Boolean read FUseTextColor write FUseTextColor;
+    //
+    property Corner1GapWidth: Integer read FCorner1GapWidth write FCorner1GapWidth;
+    property Corner2GapWidth: Integer read FCorner2GapWidth write FCorner2GapWidth;
   end;
-
-  function IsValidPreferenceFile(const AFileName: string): Boolean;
 
 var
   LinkbarWcl: TLinkbarWcl;
-  FPreferencesFileName: string;
+  FSettingsFileName: string;
 
 implementation
 
 {$R *.dfm}
 
-uses Types, Math, Dialogs, StrUtils,
-  ExplorerMenu, Linkbar.Settings, Linkbar.Shell, Linkbar.Themes,
-  Linkbar.OS, JumpLists.Api, JumpLists.Form,
-  Linkbar.L10n, RenameDialog,
-  Themes;
+uses
+  Types, Math, Dialogs, StrUtils, Themes,
+  ExplorerMenu, Linkbar.Shell, Linkbar.Themes,
+  Linkbar.OS, Linkbar.L10n, JumpLists.Form, RenameDialog,
+  Linkbar.SettingsForm, Linkbar.Settings;
 
 const
   bf: TBlendFunction = (BlendOp: AC_SRC_OVER; BlendFlags: 0;
       SourceConstantAlpha: $FF; AlphaFormat: AC_SRC_ALPHA);
 
-  WM_LB_SHELLNOTIFY = WM_USER + 88;
+  LM_SHELLNOTIFY = WM_USER + 88;
   TIMER_AUTO_SHOW = 15;
   TIMER_AUTO_HIDE = 16;
-
-function IsValidPreferenceFile(const AFileName: string): Boolean;
-var ini: TMemIniFile;
-    wd: string;
-begin
-  wd := '';
-  if FileExists(AFileName)
-  then begin
-    ini := TMemIniFile.Create(AFileName);
-    try
-      wd := ini.ReadString(INI_SECTION_MAIN, INI_DIR_LINKS, DEF_DIR_LINKS);
-    finally
-      ini.Free;
-    end;
-  end;
-  Result := DirectoryExists(wd);
-end;
 
 function FindinSL(sl: TStringList; s: String; var index: integer): boolean;
 var i: integer;
@@ -308,7 +302,6 @@ begin
 
   templist := TStringList.Create;
   templist.CaseSensitive := False;
-  //templist.Duplicates := dupIgnore;
   templist.Sorted := False;
 
   // Find supperted files in working directory
@@ -375,13 +368,23 @@ begin
         L10NFind('Message.DeleteShortcut', 'Delete shortcut?'),
         mtConfirmation, [mbOK, mbCancel], 0, mbCancel) = mrOk
     then begin
-      Items.Delete(AIndex);
+      DeleteItem(AIndex);
       UpdateWindowSize;
     end;
   end;
 end;
 
-procedure TLinkbarWcl.DrawBackground(const ABitmap: TBitmap;
+procedure TLinkbarWcl.DeleteItem(const AIndex: Integer);
+begin
+  Items.Delete(AIndex);
+  // Clear FHotIndex/FPressedIndex if Hot/Pressed item deleted
+  if (FHotIndex = AIndex)
+  then FHotIndex := ITEM_NONE;
+  if (FPressedIndex = AIndex)
+  then FPressedIndex := ITEM_NONE;
+end;
+
+procedure TLinkbarWcl.DrawBackground(const ABitmap: THBitmap;
   const AClipRect: TRect);
 var params: TDrawBackgroundParams;
 begin
@@ -389,138 +392,146 @@ begin
   params.Align := ScreenAlign;
   params.ClipRect := AClipRect;
   params.IsLight := IsLightStyle;
-
-  if (UseBkgColor)
-  then params.BgColor := FBkgColor
-  else params.BgColor := 0;
-
+  params.BgColor := BackgroundColor;
   ThemeDrawBackground(@params);
 end;
 
-procedure TLinkbarWcl.DrawCaption(const ABitmap: TBitmap; const AIndex: Integer;
-  const ADrawForDrag: Boolean = False);
-var
-  bmp: TBitmap;                   // buffer bitmap
-  i: Integer;
-  LText: string;
-  LTextRect: TRect;
-  LTextFlags: Cardinal;
-  LGlowSize: Integer;
-  LPosBounds, LTxtBounds: TRect;  // buffer bitmap position and size
-  LFromItem, LToItem: Integer;
-  LTextColor: TColor;
-  drawer: IGPGraphics;
+function CreateHBitmap(const ADc: HDC; const AWidth, AHeight: Integer; const ABbp: Word): HBITMAP;
+var bi: TBitmapInfo;
+    bits: Pointer;
 begin
-  // Optimization Hell !
+  FillChar(bi, SizeOf(bi), 0);
+  bi.bmiHeader.biSize := sizeof(BITMAPINFOHEADER);
+  bi.bmiHeader.biWidth := AWidth;
+  bi.bmiHeader.biHeight := AHeight;
+  bi.bmiHeader.biPlanes := 1;
+  bi.bmiHeader.biBitCount := ABbp;
+  Result := CreateDIBSection(ADc, bi, DIB_RGB_COLORS, bits, 0, 0);
+end;
 
+procedure TLinkbarWcl.DrawCaption(const ABitmap: THBitmap; const AIndex: Integer;
+  const ADrawForDrag: Boolean = False);
+var i: Integer;
+    LTextRect: TRect;
+    LTextFlags: Cardinal;
+    LTextColor: TColor;
+    item: TLbItem;
+    dc, dc2: HDC;
+    fnt0: HGDIOBJ;
+    bmp: THBitmap;
+begin
   if (TextLayout = tlNone) then Exit;
-
-  if AIndex = ITEM_ALL then
-  begin // all items
-    LFromItem := 0;
-    LToItem := Items.Count-1;
-    LPosBounds := Rect(0, 0, ABitmap.Width, ABitmap.Height);
-  end
-  else begin // AIndex item
-    LFromItem := AIndex;
-    LToItem := AIndex;
-    LPosBounds := Items[AIndex].Rect;
-    if ADrawForDrag
-    then LPosBounds.Location := Point(0,0);
-
-    LTxtBounds := FTextRect;
-    if AIndex = PressedIndex
-    then LTxtBounds.Offset(1,1);
-  end;
 
   LTextFlags := TEXTALIGN[TextLayout] or DT_END_ELLIPSIS or DT_SINGLELINE
     or DT_NOPREFIX or DT_NOCLIP;
 
-  if StyleServices.Enabled
-  then begin // use DrawGlassText
-    bmp := TBitmap.Create;
-    bmp.PixelFormat := pf32bit;
-    bmp.Canvas.Brush.Style := bsClear;
-    bmp.SetSize(LPosBounds.Width, -LPosBounds.Height); // '-' need for DrawGlassText
-    bmp.Canvas.Font := Screen.IconFont;
-
-    if (UseTxtColor)
-    then LTextColor := TGPColor.Create(FTxtColor).ColorRef
+  if (StyleServices.Enabled)
+  then begin
+    // Aero theme. Use DrawGlassText
+    if (FUseTextColor)
+    then begin
+      LTextColor := FTextColor;
+    end
     else begin
-      // Automatic text color
-      if (StyleServices.Enabled)
+      if (AIndex = ITEM_ALL)
       then begin
-        if (IsWindowsVista)
-        then LTextColor := clWhite
-        else if (IsWindows8OrAbove)
-             then LTextColor := clWhite
-             else LTextColor := clBtnText;
+        LTextColor := ThemeButtonNormalTextColor;
       end
-      else LTextColor := clBtnText;
+      else begin
+        if (AIndex = PressedIndex)
+        then LTextColor := ThemeButtonPressedTextColor
+        else if (AIndex = HotIndex)
+             then LTextColor := ThemeButtonSelectedTextColor
+             else LTextColor := ThemeButtonNormalTextColor;
+      end;
     end;
 
-    LGlowSize := FGlowSize;
+    dc := ABitmap.Dc;
 
-    for i := LFromItem to LToItem do
-    begin
-      LText := Items[i].Caption;
+    if (AIndex = ITEM_ALL)
+    then begin
+      fnt0 := SelectObject(dc, Screen.IconFont.Handle);
+      for i := 0 to Items.Count-1 do
+      begin
+        item := Items[i];
+        LTextRect := FTextRect;
+        LTextRect.Offset(item.Rect.Left, item.Rect.Top);
+        DrawGlassText(dc, item.Caption, LTextRect, LTextFlags, FGlowSize, LTextColor);
+      end;
+      SelectObject(dc, fnt0);
+    end
+    else begin
+      item := Items[AIndex];
 
-      if AIndex = ITEM_ALL
+      if ADrawForDrag
       then begin
         LTextRect := FTextRect;
-        LTextRect.Offset(Items[i].Rect.Left, Items[i].Rect.Top)
+        fnt0 := SelectObject(dc, Screen.IconFont.Handle);
+        DrawGlassText(dc, item.Caption, LTextRect, LTextFlags, FGlowSize, LTextColor);
+        SelectObject(dc, fnt0);
       end
-      else LTextRect := LTxtBounds;
+      else begin
+        // The shadow extends beyond the button, creating artifacts
+        // Draw on separate bitmap with button size
+        bmp := THBitmap.Create(32);
+        bmp.SetSize(BmpBtn.Width, BmpBtn.Height);
+        dc2 := bmp.Dc;
 
-      LTextRect.Inflate(-TEXT_BORDER, -TEXT_BORDER, -TEXT_BORDER, -TEXT_BORDER);
+        LTextRect := FTextRect;
+        if (AIndex = PressedIndex)
+        then LTextRect.Offset(1,1);
 
-      DrawGlassText(bmp.Canvas.Handle, LText, LTextRect, LTextFlags,
-        LGlowSize, LTextColor);
+        fnt0 := SelectObject(dc2, Screen.IconFont.Handle);
+        DrawGlassText(dc2, item.Caption, LTextRect, LTextFlags, FGlowSize, LTextColor);
+        SelectObject(dc2, fnt0);
+
+        Windows.AlphaBlend(dc,
+          item.Rect.Left, item.Rect.Top, bmp.Width, bmp.Height,
+          dc2, 0, 0, bmp.Width, bmp.Height, bf);
+
+        bmp.Free;
+      end;
     end;
-
-    Windows.AlphaBlend(ABitmap.Canvas.Handle,
-      LPosBounds.Left, LPosBounds.Top, LPosBounds.Width, LPosBounds.Height,
-      bmp.Canvas.Handle,
-      0, 0, bmp.Width, bmp.Height,
-      bf);
-    bmp.Free;
   end
-  else begin // DrawThemeText/DrawThemeTextEx not work in Classic theme
-    bmp := TBitmap.Create;
-    bmp.PixelFormat := pf24bit;
-    bmp.Canvas.Brush.Color := clBtnFace;
-    bmp.SetSize(LPosBounds.Width, LPosBounds.Height);
-    bmp.Canvas.Font := Screen.IconFont;
-    bmp.Canvas.Font.Color := clBtnText;
+  else begin
+    // Classic theme
+    // NOTE: DrawThemeText/DrawThemeTextEx not work in Classic theme
 
-    for i := LFromItem to LToItem do
-    begin
-      LText := Items[i].Caption;
+    Assert(not ADrawForDrag); // Classic Theme don't have Drag Image
 
-      if AIndex = ITEM_ALL
-      then begin
+    LTextColor := clBtnText;
+
+    dc := ABitmap.Dc;
+    fnt0 := SelectObject(dc, Screen.IconFont.Handle);
+    SetTextColor(dc, ColorToRGB(LTextColor));
+    SetBkColor(dc, ColorToRGB(clBtnFace));
+
+    if (AIndex = ITEM_ALL)
+    then begin
+      for i := 0 to Items.Count-1 do
+      begin
+        item := Items[i];
         LTextRect := FTextRect;
-        LTextRect.Offset(Items[i].Rect.Left, Items[i].Rect.Top)
-      end
-      else LTextRect := LTxtBounds;
-
-      LTextRect.Inflate(-TEXT_BORDER, -TEXT_BORDER, -TEXT_BORDER, -TEXT_BORDER);
-      DrawText(bmp.Canvas.Handle, LText, -1, LTextRect, LTextFlags);
+        LTextRect.Offset(item.Rect.Left, item.Rect.Top);
+        DrawText(dc, item.Caption, -1, LTextRect, LTextFlags);
+      end;
+      ABitmap.Opaque;
+    end
+    else begin
+      item := Items[AIndex];
+      LTextRect := FTextRect;
+      LTextRect.Offset(item.Rect.Left, item.Rect.Top);
+      if (AIndex = PressedIndex)
+      then LTextRect.Offset(1,1);
+      DrawText(dc, item.Caption, -1, LTextRect, LTextFlags);
+      ABitmap.OpaqueRect(item.Rect);
     end;
 
-    drawer := ABitmap.ToGPGraphics;
-    drawer.DrawImage(bmp.ToGPBitmap,
-      LPosBounds.Left+TEXT_BORDER, LPosBounds.Top+TEXT_BORDER,
-      TEXT_BORDER, TEXT_BORDER,
-      LPosBounds.Width-2*TEXT_BORDER, LPosBounds.Height-2*TEXT_BORDER,
-      UnitPixel);
-    drawer := nil;
-
-    bmp.Free;
+    SelectObject(dc, fnt0);
   end;
 end;
 
-procedure TLinkbarWcl.DrawItem(ABitmap: TBitmap; AIndex: integer; ASelected,
+procedure TLinkbarWcl.DrawItem(ABitmap: THBitmap; AIndex: integer; ASelected,
   APressed: Boolean; ADrawBg: Boolean; ADrawForDrag: Boolean);
 var r: TRect;
     d: Integer;
@@ -542,19 +553,19 @@ begin
   then ThemeDrawButton(ABitmap, r, True)
   else if ASelected
        then begin
-         Windows.AlphaBlend(ABitmap.Canvas.Handle, r.Left, r.Top, r.Width, r.Height,
-           BmpBtn.Canvas.Handle, 0, 0, r.Width, r.Height, bf);
+         Windows.AlphaBlend(ABitmap.Dc, r.Left, r.Top, r.Width, r.Height,
+           BmpBtn.Dc, 0, 0, r.Width, r.Height, bf);
        end;
 
   if APressed
   then d := 1
   else d := 0;
 
-  // draw text
+  // Draw text
   DrawCaption(ABitmap, AIndex, ADrawForDrag);
 
-  Items.Draw(ABitmap.Canvas.Handle, AIndex,
-    r.Left + FIconOffset.X + d, r.Top + FIconOffset.Y + d);
+  // Draw icon
+  Items.Draw(ABitmap.Dc, AIndex, r.Left + FIconOffset.X + d, r.Top + FIconOffset.Y + d);
 end;
 
 procedure TLinkbarWcl.DrawItems;
@@ -604,21 +615,17 @@ begin
   // Draw icons
   for i := 0 to Items.Count - 1 do
   begin
-    Items.Draw(BmpMain.Canvas.Handle, i,
+    Items.Draw(BmpMain.Dc, i,
       Items[i].Rect.Left + FIconOffset.X, Items[i].Rect.Top + FIconOffset.Y);
   end;
 end;
 
 procedure TLinkbarWcl.RecreateMainBitmap(const AWidth, AHeight: integer);
 begin
-  if Assigned(BmpMain) then BmpMain.Free;
-  // Create clear bitmap
-  BmpMain := TBitmap.Create;
-  BmpMain.PixelFormat := pf32bit;
-  BmpMain.Canvas.Brush.Style := bsClear;
   BmpMain.SetSize(AWidth, AHeight);
+  BmpMain.Clear;
   // Draw background
-  DrawBackground(BmpMain, BmpMain.Canvas.ClipRect);
+  DrawBackground(BmpMain, Rect(0, 0, AWidth, AHeight));
   // Draw items
   DrawItems;
 end;
@@ -626,198 +633,193 @@ end;
 procedure TLinkbarWcl.RecreateButtonBitmap(const AWidth, AHeight: integer);
 begin
   // Create clear bitmap
-  if Assigned(BmpBtn) then BmpBtn.Free;
-  BmpBtn := TBitMap.Create;
-  BmpBtn.PixelFormat := pf32bit;
-  BmpBtn.Canvas.Brush.Style := bsClear;
   BmpBtn.SetSize(AWidth, AHeight);
-
-  // test hover texture
-  ThemeDrawButton(BmpBtn, Rect(0, 0, AWidth, AHeight), False);
-
+  BmpBtn.Clear;
+  ThemeDrawButton(BmpBtn, BmpBtn.Bound, False);
   // Buffer for selections
-  if not Assigned(CBmpSelectedItem)
-  then begin
-    CBmpSelectedItem := TBitmap.Create;
-    CBmpSelectedItem.PixelFormat := pf32bit;
-  end;
   CBmpSelectedItem.SetSize(AWidth, AHeight);
-
   // Buffer for drop
-  if not Assigned(CBmpDropPosition)
-  then begin
-    CBmpDropPosition := TBitmap.Create;
-    CBmpDropPosition.PixelFormat := pf32bit;
-  end;
   CBmpDropPosition.SetSize(AWidth, AHeight);
 end;
 
 procedure TLinkbarWcl.UpdateWindow(const AWnd: HWND; const ABounds: TRect;
-  const AScreenEdge: TScreenAlign; const ABitmap: TBitmap);
-var
-  Pt1, Pt2: TPoint;
-  Sz: TSize;
-  bmp: TBitmap;
-  gpDrawer: IGPGraphics;
+  const AScreenEdge: TScreenAlign; const ABitmap: THBitmap);
+var w, h, c1gw, c2gw, wh: Integer;
+    Pt1, Pt2: TPoint;
+    Sz: TSize;
+    drawer: IGPGraphics;
+    r: TGPRect;
+    bmp: THBitmap;
+    dc: HDC;
+    p: Pointer;
 begin
-  // NOTE: we can't set TBlendFunction.SourceConstantAlpha = $01 because after
-  // combined with any per-pixel alpha values in the hdcSrc we can get fully
-  // transparent pixels
-  // Insted use new bitmap filled black color with alpha $01
-  if (FAutoHiden and FAutoHideTransparency)
+  w := ABounds.Width;
+  h := ABounds.Height;
+
+  // Draw
+  if (FAutoHiden)
   then begin
-    Pt1 := ABounds.Location;
-    Pt2 := Point(0,0);
+    // Hidden
 
-    bmp := TBitmap.Create;
-    bmp.PixelFormat := pf32bit;
-    bmp.Canvas.Brush.Style := bsClear;
-    bmp.SetSize(ABounds.Width, ABounds.Height);
-    gpDrawer := bmp.ToGPGraphics;
-    gpDrawer.Clear( $01000000 );
+    // Check corner gaps width
+    c1gw := FCorner1GapWidth;
+    c2gw := FCorner2GapWidth;
+    if (c1gw > 0) or (c2gw > 0)
+    then begin
+      if ScreenAlign in [saLeft, saRight]
+      then wh := h
+      else wh := w;
+      if (c1gw > wh - c2gw)
+      then begin
+        c1gw := 0;
+        c2gw := 0;
+      end;
+    end;
 
-    Sz := TSize.Create(ABounds.Width, ABounds.Height);
+    if (FAutoHideTransparency)
+    then begin
+      // and Transparency
+      Pt1 := ABounds.TopLeft;
+      Sz := TSize.Create(w, h);
+      Pt2 := Point(0,0);
 
-    UpdateLayeredWindow(AWnd, 0, @Pt1, @Sz,
-      bmp.Canvas.Handle, @Pt2, 0, @bf, ULW_ALPHA);
+      bmp := THBitmap.Create(32);
+      bmp.SetSize(w, h);
+      dc := bmp.Dc;
 
-    bmp.Free;
+      drawer := TGPGraphics.FromHDC(dc);
+      if (c1gw > 0) or (c2gw > 0)
+      then begin
+        if ScreenAlign in [saLeft, saRight]
+        then r := TGPRect.Create(0, c1gw, w, h - c1gw - c2gw)
+        else r := TGPRect.Create(c1gw, 0, w - c1gw - c2gw, h);
+        drawer.SetClip(r);
+      end;
+      drawer.Clear($01000000);
+
+      UpdateLayeredWindow(AWnd, 0, @Pt1, @Sz, dc, @Pt2, 0, @bf, ULW_ALPHA);
+      bmp.Free;
+    end
+    else begin
+      // and Opaque
+      if (c1gw > 0) or (c2gw > 0)
+      then begin
+        // w/ gaps
+        Pt1 := ABounds.TopLeft;
+        Sz := TSize.Create(w, h);
+        case AScreenEdge of
+          saLeft:   Pt2 := Point(ABitmap.Width - w, 0);
+          saTop:    Pt2 := Point(0, ABitmap.Height - h);
+          saRight:  Pt2 := Point(0, 0);
+          saBottom: Pt2 := Point(0, 0);
+        end;
+
+        bmp := THBitmap.Create(32);
+        bmp.SetSize(w, h);
+        dc := bmp.Dc;
+
+        if ScreenAlign in [saLeft, saRight]
+        then BitBlt(dc, 0, c1gw, w, h - c1gw - c2gw, ABitmap.Dc, Pt2.X, c1gw, SRCCOPY)
+        else BitBlt(dc, c1gw, 0, w - c1gw - c2gw, h, ABitmap.Dc, c1gw, Pt2.Y, SRCCOPY);
+
+        Pt2 := Point(0,0);
+        UpdateLayeredWindow(AWnd, 0, @Pt1, @Sz, dc, @Pt2, 0, @bf, ULW_ALPHA);
+        bmp.Free;
+      end
+      else begin
+        // w/o gaps
+        Pt1 := ABounds.TopLeft;
+        Sz := TSize.Create(w, h);
+        case AScreenEdge of
+          saLeft:   Pt2 := Point(ABitmap.Width - w, 0);
+          saTop:    Pt2 := Point(0, ABitmap.Height - h);
+          saRight:  Pt2 := Point(0, 0);
+          saBottom: Pt2 := Point(0, 0);
+        end;
+        UpdateLayeredWindow(AWnd, 0, @Pt1, @Sz, ABitmap.Dc, @Pt2, 0, @bf, ULW_ALPHA);
+      end;
+    end;
   end
   else begin
-    Pt1 := ABounds.Location;
-
+    // Not Hidden
+    if (ABounds = BoundsRect)
+    then p := nil
+    else p := @ABounds.TopLeft;
+    Sz := TSize.Create(w, h);
     case AScreenEdge of
-      saLeft:   Pt2 := Point(ABitmap.Width - ABounds.Width, 0);
-      saTop:    Pt2 := Point(0, ABitmap.Height - ABounds.Height);
+      saLeft:   Pt2 := Point(ABitmap.Width - w, 0);
+      saTop:    Pt2 := Point(0, ABitmap.Height - h);
       saRight:  Pt2 := Point(0, 0);
       saBottom: Pt2 := Point(0, 0);
     end;
 
-    Sz := TSize.Create(ABounds.Width, ABounds.Height);
-
-    UpdateLayeredWindow(AWnd, 0, @Pt1, @Sz,
-      ABitmap.Canvas.Handle, @Pt2, 0, @bf, ULW_ALPHA); {}
+    UpdateLayeredWindow(AWnd, 0, p, @Sz, ABitmap.Dc, @Pt2, 0, @bf, ULW_ALPHA);
   end;
 end;
 
 procedure TLinkbarWcl.UpdateBlur;
+var blurEnabled: Boolean;
 begin
-  ThemeUpdateBlur(Handle, not (FAutoHiden and FAutoHideTransparency) );
+  if IsWindows10
+  then begin
+    if (FAutoHiden and FAutoHideTransparency)
+    then ThemeSetWindowAccentPolicy10(Handle, lmDisabled, 0)
+    else ThemeSetWindowAccentPolicy10(Handle, FLookMode, BackgroundColor);
+  end
+  else begin
+    blurEnabled := not (FAutoHiden and FAutoHideTransparency);
+    if (IsWindows8And8Dot1 and not FEnableAeroGlass)
+    then blurEnabled := False;
+    ThemeUpdateBlur(Handle, blurEnabled);
+  end;
 end;
 
-procedure TLinkbarWcl.LoadProperties(const AFileName: string);
-var IniFile: TMemIniFile;
+{ Load settings from file }
+procedure TLinkbarWcl.LoadSettings;
+var settings: TSettings;
+    hki: THotkeyInfo;
 begin
-  if FileExists(AFileName) then
-  begin // Load values
-    IniFile := TMemIniFile.Create(AFileName);
-    try
-      WorkDir := IniFile.ReadString(INI_SECTION_MAIN, INI_DIR_LINKS, DEF_DIR_LINKS);
+  settings.Open(FSettingsFileName);
+  // Read
+  WorkDir               := settings.Read(INI_DIR_LINKS, DEF_DIR_LINKS);
+  FAutoHide             := settings.Read(INI_AUTOHIDE, DEF_AUTOHIDE);
+  FAutoHideTransparency := settings.Read(INI_AUTOHIDE_TRANSPARENCY, DEF_AUTOHIDE_TRANSPARENCY);
+  FAutoShowDelay        := settings.Read(INI_AUTOSHOW_DELAY, DEF_AUTOSHOW_DELAY, 0, 60000);
+  FAutoShowMode         := settings.Read<TAutoShowMode>(INI_AUTOHIDE_SHOWMODE, DEF_AUTOHIDE_SHOWMODE);
+  FBackgroundColor      := Cardinal(settings.Read(INI_BKGCOLOR, DEF_BKGCOLOR));
+  FCorner1GapWidth      := settings.Read(INI_CORNER1GAP_WIDTH, DEF_CORNERGAP_WIDTH);
+  FCorner2GapWidth      := settings.Read(INI_CORNER2GAP_WIDTH, DEF_CORNERGAP_WIDTH);
+  FEnableAeroGlass      := settings.Read(INI_ENABLE_AG, DEF_ENABLE_AG);
+  FGlowSize             := settings.Read(INI_GLOWSIZE, DEF_GLOWSIZE, GLOW_SIZE_MIN, GLOW_SIZE_MAX);
+  FHintShow             := True;
+  hki                   := settings.Read(INI_AUTOHIDE_HOTKEY, DEF_AUTOHIDE_HOTKEY);
+  FIconSize             := settings.Read(INI_ICON_SIZE, DEF_ICON_SIZE, ICON_SIZE_MIN, ICON_SIZE_MAX);
+  FIsLightStyle         := settings.Read(INI_ISLIGHT, DEF_ISLIGHT);
+  FItemMargin.cx        := settings.Read(INI_MARGINX, DEF_MARGINX, MARGIN_MIN, MARGIN_MAX);
+  FItemMargin.cy        := settings.Read(INI_MARGINY, DEF_MARGINY, MARGIN_MIN, MARGIN_MAX);
+  FItemOrder            := settings.Read<TItemOrder>(INI_ITEM_ORDER, DEF_ITEM_ORDER);
+  FJumplistRecentMax    := settings.Read(INI_JUMPLIST_RECENTMAX, DEF_JUMPLIST_RECENTMAX, JUMPLIST_RECENTMAX_MIN, JUMPLIST_RECENTMAX_MAX);
+  FJumplistShowMode     := settings.Read<TJumplistShowMode>(INI_JUMPLIST_SHOWMODE, DEF_JUMPLIST_SHOWMODE);
+  FLockLinkbar          := settings.Read(INI_LOCK_BAR, DEF_LOCK_BAR);
+  FLookMode             := settings.Read<TLookMode>(INI_LOOKMODE, DEF_LOOKMODE);
+  FMonitorNum           := settings.Read(INI_MONITORNUM, Screen.PrimaryMonitor.MonitorNum, 0, Screen.MonitorCount-1);
+  FScreenEdge           := settings.Read<TScreenAlign>(INI_EDGE, DEF_EDGE);
+  FSortAlphabetically   := settings.Read(INI_SORT_AB, DEF_SORT_AB);
+  FTextColor            := Cardinal(settings.Read(INI_TXTCOLOR, DEF_TXTCOLOR) and $ffffff);
+  FTextLayout           := settings.Read<TTextLayout>(INI_TEXT_LAYOUT, DEF_TEXT_LAYOUT);
+  FTextOffset           := settings.Read(INI_TEXT_OFFSET, DEF_TEXT_OFFSET, TEXT_OFFSET_MIN, TEXT_OFFSET_MAX);
+  FTextWidth            := settings.Read(INI_TEXT_WIDTH, DEF_TEXT_WIDTH, TEXT_WIDTH_MIN, TEXT_WIDTH_MAX);
+  FUseBkgndColor          := settings.Read(INI_USEBKGCOLOR, DEF_USEBKGCOLOR);
+  FUseTextColor          := settings.Read(INI_USETXTCOLOR, DEF_USETXTCOLOR);
+  FStayOnTop := FormStyle = fsStayOnTop;
+  StayOnTop             := settings.Read(INI_STAYONTOP, DEF_STAYONTOP);
+  //
+  settings.Close;
 
-      FMonitorNum := IniFile.ReadInteger(INI_SECTION_MAIN, INI_MONITORNUM, -1);
-      FScreenEdge := TScreenAlign(IniFile.ReadInteger(INI_SECTION_MAIN, INI_EDGE, DEF_EDGE));
-      FAutoHide := IniFile.ReadBool(INI_SECTION_MAIN, INI_AUTOHIDE, DEF_AUTOHIDE);
-      FAutoHideTransparency := IniFile.ReadBool(INI_SECTION_MAIN, INI_AUTOHIDE_TRANSPARENCY,
-        DEF_AUTOHIDE_TRANSPARENCY);
-      FAutoShowMode := TAutoShowMode(IniFile.ReadInteger(INI_SECTION_MAIN, INI_AUTOHIDE_SHOWMODE,
-        DEF_AUTOHIDE_SHOWMODE));
-      FHotkeyInfo.Create( IniFile.ReadString(INI_SECTION_MAIN, INI_AUTOHIDE_HOTKEY, DEF_AUTOHIDE_HOTKEY) );
-      FIconSize := IniFile.ReadInteger(INI_SECTION_MAIN, INI_ICON_SIZE, DEF_ICON_SIZE);
-      FItemMargin.cx := IniFile.ReadInteger(INI_SECTION_MAIN, INI_MARGINX, DEF_MARGINX);
-      FItemMargin.cy := IniFile.ReadInteger(INI_SECTION_MAIN, INI_MARGINY, DEF_MARGINY);
-
-      FTextLayout := TTextLayout(IniFile.ReadInteger(INI_SECTION_MAIN, INI_TEXT_LAYOUT, DEF_TEXT_LAYOUT));
-      FTextOffset := IniFile.ReadInteger(INI_SECTION_MAIN, INI_TEXT_OFFSET, DEF_TEXT_OFFSET);
-      FTextWidth := IniFile.ReadInteger(INI_SECTION_MAIN, INI_TEXT_WIDTH, DEF_TEXT_WIDTH);
-
-      FItemOrder := TItemOrder(IniFile.ReadInteger(INI_SECTION_MAIN, INI_ITEM_ORDER, DEF_ITEM_ORDER));
-      FLockLinkbar := IniFile.ReadBool(INI_SECTION_MAIN, INI_LOCK_BAR, DEF_LOCK_BAR);
-
-      FIsLightStyle := IniFile.ReadBool(INI_SECTION_MAIN, INI_ISLIGHT, DEF_ISLIGHT);
-      FEnableAeroGlass := IniFile.ReadBool(INI_SECTION_MAIN, INI_ENABLE_AG, DEF_ENABLE_AG);
-
-      FAutoShowDelay := IniFile.ReadInteger(INI_SECTION_MAIN, INI_AUTOSHOW_DELAY, DEF_AUTOSHOW_DELAY);
-      FSortAlphabetically := IniFile.ReadBool(INI_SECTION_MAIN, INI_SORT_AB, DEF_SORT_AB);
-
-      FUseBkgColor := IniFile.ReadBool(INI_SECTION_MAIN, INI_USEBKGCOLOR, DEF_USECOLOR);
-      FBkgColor := IniFile.ReadInteger(INI_SECTION_MAIN, INI_BKGCOLOR, DEF_BKGCOLOR);
-      FUseTxtColor := IniFile.ReadBool(INI_SECTION_MAIN, INI_USETXTCOLOR, DEF_USECOLOR);
-      FTxtColor := IniFile.ReadInteger(INI_SECTION_MAIN, INI_TXTCOLOR, DEF_TXTCOLOR);
-
-      FGlowSize := IniFile.ReadInteger(INI_SECTION_MAIN, INI_GLOWSIZE, DEF_GLOWSIZE);
-
-      FHintShow := IniFile.ReadBool(INI_SECTION_DEV, INI_HINT_SHOW, DEF_HINT_SHOW);
-      StayOnTop := IniFile.ReadBool(INI_SECTION_MAIN, INI_STAYONTOP, DEF_STAYONTOP);
-      FJumplistShowMode := TJumplistShowMode(IniFile.ReadInteger(INI_SECTION_MAIN, INI_JUMPLISTSHOWMODE, DEF_JUMPLISTSHOWMODE));
-    finally
-      IniFile.Free;
-    end;
-  end
-  else begin // Default values
-    FMonitorNum := Screen.PrimaryMonitor.MonitorNum;
-    FScreenEdge := TScreenAlign(DEF_EDGE);
-    FAutoHide := DEF_AUTOHIDE;
-    FAutoHideTransparency := DEF_AUTOHIDE_TRANSPARENCY;
-    FAutoShowMode := TAutoShowMode(DEF_AUTOHIDE_SHOWMODE);
-    FHotkeyInfo.Create(DEF_AUTOHIDE_HOTKEY);
-    FIconSize  := DEF_ICON_SIZE;
-    FItemMargin := TSize.Create(DEF_MARGINX, DEF_MARGINY);
-
-    FTextLayout := TTextLayout(DEF_TEXT_LAYOUT);
-    FTextOffset := DEF_TEXT_OFFSET;
-    FTextWidth := DEF_TEXT_WIDTH;
-
-    FItemOrder := TItemOrder(DEF_ITEM_ORDER);
-    FLockLinkbar := DEF_LOCK_BAR;
-
-    FIsLightStyle := DEF_ISLIGHT;
-    FEnableAeroGlass := DEF_ENABLE_AG;
-
-    FGlowSize := DEF_GLOWSIZE;
-
-    FHintShow := DEF_HINT_SHOW;
-
-    FAutoShowDelay := DEF_AUTOSHOW_DELAY;
-    FSortAlphabetically := DEF_SORT_AB;
-    StayOnTop := DEF_STAYONTOP;
-    FJumplistShowMode := TJumplistShowMode(DEF_JUMPLISTSHOWMODE);
-  end;
-
-  { Check values }
-  // Autohide mode
-  if ( FAutoShowMode < Low(TAutoShowMode) ) or ( FAutoShowMode > High(TAutoShowMode) )
-  then FAutoShowMode := TAutoShowMode(DEF_AUTOHIDE_SHOWMODE);
-  // Monitor number
-  if not InRange(FMonitorNum, 0, Screen.MonitorCount-1)
-  then FMonitorNum := Screen.PrimaryMonitor.MonitorNum;
-  // Screen edge
-  if ( FScreenEdge < Low(TScreenAlign) ) or ( FScreenEdge > High(TScreenAlign) )
-  then FScreenEdge := TScreenAlign(DEF_EDGE);
-  // Jumplists
-  if ( FJumplistShowMode < Low(TJumplistShowMode) ) or ( FJumplistShowMode > High(TJumplistShowMode) )
-  then FJumplistShowMode := TJumplistShowMode(DEF_JUMPLISTSHOWMODE);
-  
-  FIconSize := EnsureRange(FIconSize, ICON_SIZE_MIN, ICON_SIZE_MAX);
-  FItemMargin.cx := EnsureRange(FItemMargin.cx, MARGIN_MIN, MARGIN_MAX);
-  FItemMargin.cy := EnsureRange(FItemMargin.cy, MARGIN_MIN, MARGIN_MAX);
-  // Text layout
-  if ( FTextLayout < Low(TTextLayout) ) or ( FTextLayout > High(TTextLayout) )
-  then FTextLayout := TTextLayout(DEF_TEXT_LAYOUT);
-
-  FTextOffset := EnsureRange(FTextOffset, TEXT_OFFSET_MIN, TEXT_OFFSET_MAX);
-  FTextWidth := EnsureRange(FTextWidth, TEXT_WIDTH_MIN, TEXT_WIDTH_MAX);
-
-  if ( FItemOrder < Low(TItemOrder) ) or ( FItemOrder > High(TItemOrder) )
-  then FItemOrder := TItemOrder(DEF_ITEM_ORDER);
-
-  if (FAutoShowDelay < 0) then FAutoShowDelay := 0;
-
-  FGlowSize := EnsureRange(FGlowSize, GLOW_SIZE_MIN, GLOW_SIZE_MAX);
-
-  { Set other values }
+  // Set other values
   FGripSize := GRIP_SIZE;
   FHotIndex := ITEM_NONE;
-  FItemPressed := ITEM_NONE;
+  FPressedIndex := ITEM_NONE;
   FItemDropPosition := ITEM_NONE;
   FItemPopup := ITEM_NONE;
   FDragIndex := ITEM_NONE;
@@ -829,86 +831,69 @@ begin
   ExpAeroGlassEnabled := FEnableAeroGlass;
 
   // Register Hotkey
-  if (AutoHide)
-  then RegisterHotkeyNotify(Handle, FHotkeyInfo);
+  HotkeyInfo := hki;
 end;
 
-procedure TLinkbarWcl.SaveProperties;
-var IniFile: TMemIniFile;
-    sl: TStringList;
+procedure TLinkbarWcl.SaveLinks;
+var sl: TStringList;
     i: integer;
-    sv: Boolean;
 begin
-  try
-    if DirectoryExists(WorkDir)
-    then sv := True
-    else sv := ForceDirectories(WorkDir);
-
-    if sv
-    then begin
-      sl := TStringList.Create;
-      try
-        for i := 0 to Items.Count-1 do
-          sl.Add( ExtractFileName(Items[i].FileName) );
-        sl.SaveToFile(WorkDir + LINKSLIST_FILE_NAME, TEncoding.UTF8);
-      finally
-        sl.Free;
-      end;
+  if DirectoryExists(WorkDir)
+     or ForceDirectories(WorkDir)
+  then begin
+    sl := TStringList.Create;
+    try
+      for i := 0 to Items.Count-1 do
+        sl.Add( ExtractFileName(Items[i].FileName) );
+      sl.SaveToFile(WorkDir + LINKSLIST_FILE_NAME, TEncoding.UTF8);
+    finally
+      sl.Free;
     end;
+  end;
+end;
 
-    if DirectoryExists(ExtractFilePath(FPreferencesFileName))
-    then sv := True
-    else sv := ForceDirectories(ExtractFilePath(FPreferencesFileName));
-
-    if sv
-    then begin
-      IniFile := TMemIniFile.Create(FPreferencesFileName);
-      try
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_MONITORNUM, FMonitorNum);
-        i := Integer(ScreenAlign);
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_EDGE, i);
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_AUTOHIDE, AutoHide);
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_AUTOHIDE_TRANSPARENCY, FAutoHideTransparency);
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_AUTOHIDE_SHOWMODE, Integer(AutoShowMode));
-        IniFile.WriteString(INI_SECTION_MAIN, INI_AUTOHIDE_HOTKEY, HotkeyInfo);
-
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_ICON_SIZE, IconSize);
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_MARGINX, ItemMargin.cx);
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_MARGINY, ItemMargin.cy);
-
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_TEXT_LAYOUT, Integer(TextLayout));
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_TEXT_OFFSET, TextOffset);
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_TEXT_WIDTH, TextWidth);
-
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_ITEM_ORDER, Integer(ItemOrder));
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_LOCK_BAR, FLockLinkbar);
-
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_ISLIGHT, FIsLightStyle);
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_ENABLE_AG, FEnableAeroGlass);
-        // Dev don't save
-        //IniFile.WriteBool(INI_DEV, INI_HINT_SHOW, HintShow);
-
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_AUTOSHOW_DELAY, FAutoShowDelay);
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_SORT_AB, FSortAlphabetically);
-
-        // Custom background and text colors
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_USEBKGCOLOR, FUseBkgColor);
-        IniFile.WriteString(INI_SECTION_MAIN, INI_BKGCOLOR, HexDisplayPrefix + IntToHex(FBkgColor, 8));
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_USETXTCOLOR, FUseTxtColor);
-        IniFile.WriteString(INI_SECTION_MAIN, INI_TXTCOLOR, HexDisplayPrefix + IntToHex(FTxtColor, 6));
-
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_GLOWSIZE, FGlowSize);
-
-        IniFile.WriteBool(INI_SECTION_MAIN, INI_STAYONTOP, FStayOnTop);
-        // Jumplists
-        IniFile.WriteInteger(INI_SECTION_MAIN, INI_JUMPLISTSHOWMODE, Integer(JumplistShowMode));
-
-        IniFile.UpdateFile;
-      finally
-        IniFile.Free;
-      end;
-    end;
-  except
+procedure TLinkbarWcl.SaveSettings;
+var path: string;
+    settings: TSettings;
+begin
+  path := ExtractFilePath(FSettingsFileName);
+  if DirectoryExists(path)
+     or ForceDirectories(path)
+  then begin
+    settings.Open(FSettingsFileName);
+    // Write
+    settings.Write(INI_MONITORNUM, FMonitorNum);
+    settings.Write(INI_EDGE, Integer(ScreenAlign));
+    settings.Write(INI_AUTOHIDE, AutoHide);
+    settings.Write(INI_AUTOHIDE_TRANSPARENCY, FAutoHideTransparency);
+    settings.Write(INI_AUTOHIDE_SHOWMODE, Integer(AutoShowMode));
+    settings.Write(INI_AUTOHIDE_HOTKEY, String(HotkeyInfo));
+    settings.Write(INI_ICON_SIZE, IconSize);
+    settings.Write(INI_MARGINX, ItemMargin.cx);
+    settings.Write(INI_MARGINY, ItemMargin.cy);
+    settings.Write(INI_TEXT_LAYOUT, Integer(TextLayout));
+    settings.Write(INI_TEXT_OFFSET, TextOffset);
+    settings.Write(INI_TEXT_WIDTH, TextWidth);
+    settings.Write(INI_ITEM_ORDER, Integer(ItemOrder));
+    settings.Write(INI_LOCK_BAR, FLockLinkbar);
+    settings.Write(INI_ISLIGHT, FIsLightStyle);
+    settings.Write(INI_ENABLE_AG, FEnableAeroGlass);
+    settings.Write(INI_AUTOSHOW_DELAY, FAutoShowDelay);
+    settings.Write(INI_SORT_AB, FSortAlphabetically);
+    settings.Write(INI_USEBKGCOLOR, FUseBkgndColor);
+    settings.Write(INI_BKGCOLOR, HexDisplayPrefix + IntToHex(BackgroundColor, 8));
+    settings.Write(INI_USETXTCOLOR, FUseTextColor);
+    settings.Write(INI_TXTCOLOR, HexDisplayPrefix + IntToHex(FTextColor, 6));
+    settings.Write(INI_GLOWSIZE, FGlowSize);
+    settings.Write(INI_STAYONTOP, FStayOnTop);
+    settings.Write(INI_JUMPLIST_SHOWMODE, Integer(JumplistShowMode));
+    settings.Write(INI_JUMPLIST_RECENTMAX, JumplistRecentMax);
+    settings.Write(INI_LOOKMODE, Integer(FLookMode));
+    settings.Write(INI_CORNER1GAP_WIDTH, FCorner1GapWidth);
+    settings.Write(INI_CORNER2GAP_WIDTH, FCorner2GapWidth);
+    // Save
+    settings.Update;
+    settings.Close;
   end;
 end;
 
@@ -929,20 +914,29 @@ end;
 
 procedure TLinkbarWcl.FormCreate(Sender: TObject);
 begin
+  FCreated := False;
+  CreateBitmaps;
+
+  Self.DesktopFont := True;
+
   L10n;
+
   oHint := TTooltip32.Create(Handle);
 
   pMenu.Items.RethinkHotkeys;
 
   Color := 0;
-
   FrmProperties := nil;
   FLockAutoHide := False;
   FCanAutoHide := True;
 
-  LoadProperties(FPreferencesFileName);
+  LoadSettings;
 
-  ThemeSetWindowAttribute(Handle);
+  UpdateBackgroundColor;
+
+  if IsWindows10
+  then ThemeSetWindowAttribute10(Handle, FLookMode, BackgroundColor)
+  else ThemeSetWindowAttribute78(Handle);
 
   ThemeInitData(Handle, FIsLightStyle);
 
@@ -960,7 +954,13 @@ begin
   if not AutoHide then oAppBar.Loaded
   else AutoHide := TRUE;
 
-  BitBucketNotify := RegisterBitBucketNotify(Handle, WM_LB_SHELLNOTIFY);
+  BitBucketNotify := RegisterBitBucketNotify(Handle, LM_SHELLNOTIFY);
+
+  FCreated := True;
+
+  UpdateBlur;
+
+  DoDelayedAutoHide(1000);
 end;
 
 procedure TLinkbarWcl.L10n;
@@ -978,7 +978,7 @@ end;
 
 procedure TLinkbarWcl.FormDestroy(Sender: TObject);
 begin
-  DeregisterBitBucketNotify(BitBucketNotify);
+  UnregisterBitBucketNotify(BitBucketNotify);
   UnregisterHotkeyNotify(Handle);
 
   if Assigned(FrmProperties)
@@ -988,7 +988,7 @@ begin
   StopDirWatch;
 
   if (not FRemoved)
-  then SaveProperties;
+  then SaveLinks;
 
   ThemeCloseData;
 
@@ -1000,6 +1000,14 @@ begin
   if Assigned(Items) then Items.Free;
 end;
 
+procedure TLinkbarWcl.CreateBitmaps;
+begin
+  CBmpSelectedItem := THBitmap.Create(32);
+  CBmpDropPosition := THBitmap.Create(32);
+  BmpBtn := THBitmap.Create(32);
+  BmpMain := THBitmap.Create(32);
+end;
+
 function TLinkbarWcl.IsItemIndex(const AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex < Items.Count);
@@ -1007,9 +1015,12 @@ end;
 
 procedure TLinkbarWcl.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-{$IFNDEF DEBUG}
-  //if (Shift <> []) then Exit;
-{$ENDIF}
+  if AutoHide
+     and FAutoHiden
+  then begin
+    Key := 0;
+    Exit;
+  end;
 
   if (Items.Count = 0) then Exit;
 
@@ -1025,7 +1036,12 @@ begin
       end;
     VK_ESCAPE: // Deselect
       begin
-        HotIndex := ITEM_NONE;
+        if (HotIndex = ITEM_NONE)
+        then begin
+          FCanAutoHide := True;
+          DoAutoHide;
+        end
+        else HotIndex := ITEM_NONE;
         Exit;
       end;
     VK_F2: // Rename
@@ -1044,6 +1060,11 @@ begin
           oHint.Cancel;
           SHDeleteOp(Handle, Items[HotIndex].FileName, GetKeyState(VK_SHIFT) >= 0);
         end;
+        Exit;
+      end;
+    VK_TAB:
+      begin
+        HotIndex := HotIndex + 1;
         Exit;
       end;
     // Arrows
@@ -1122,12 +1143,10 @@ end;
 
 procedure TLinkbarWcl.CMDialogKey(var Msg: TCMDialogKey);
 begin
+  // If you do not return 0 then VK_TAB will not pass into FormKeyDown
   if (Msg.CharCode = VK_TAB)
-  then begin
-    HotIndex := HotIndex + 1;
-    Exit;
-  end;
-  inherited;
+  then Msg.Result := 0
+  else inherited;
 end;
 
 function TLinkbarWcl.ItemIndexByPoint(const APt: TPoint;
@@ -1164,6 +1183,7 @@ begin
     mbLeft:
       begin
         FMouseLeftDown := True;
+        FLockHotIndex := False;
         PressedIndex := ItemIndexByPoint( Point(X, Y) );
       end
     else Exit;
@@ -1204,9 +1224,9 @@ begin
     end
     else if (not FLockLinkbar)
     then begin
-      if (FItemPressed = ITEM_NONE)
+      if (FPressedIndex = ITEM_NONE)
       then begin
-        if ( TPoint.Create(X,Y).Distance(FMousePosDown) > MOUSE_THRESHOLD )
+        if ( TPoint.Create(X,Y).Distance(FMousePosDown) > PANEL_DRAG_THRESHOLD )
         then begin
           FMouseDragLinkbar := True;
           FMouseDragItem := False;
@@ -1218,13 +1238,12 @@ begin
       else begin
         // If cursor leave item rect then start DragItem
         // This is done by MS for TaskBand items
-        if ( not PtInRect(Items[FItemPressed].Rect, TPoint.Create(X, Y)) )
+        if ( not PtInRect(Items[FPressedIndex].Rect, TPoint.Create(X, Y)) )
         then begin
           FMouseDragItem := True;
           FMouseDragLinkbar := False;
         end;
       end;
-
     end;
   end;
 end;
@@ -1238,13 +1257,16 @@ begin
        or
        ( (AutoShowMode = smMouseClickRight) and (Button = mbRight) )
     then begin
-
       if PtInRect(Rect(0,0,Width,Height), Point(X, Y))
-      then DoAutoShow;
+      then begin
+        FCanAutoHide := False;
+        DoAutoShow;
+      end;
     end;
     Exit;
   end;
 
+  FCanAutoHide := False;
   FMousePosUp := Point(X, Y);
   case Button of
     mbLeft:
@@ -1256,6 +1278,7 @@ begin
           FMouseDragLinkbar := False;
           FMonitorNum := FDragMonitorNum;
           ScreenAlign := FDragScreenEdge;
+          TSettings.Write(FSettingsFileName, INI_EDGE, Integer(FScreenEdge));
         end
         else if FMouseDragItem
         then begin // drag item end
@@ -1391,6 +1414,17 @@ begin
   QuerySizedEvent(nil, r.Left, r.Top, r.Width, r.Height);
 end;
 
+// Macros from windowsx.h:
+// Important  Do not use the LOWORD or HIWORD macros to extract the x- and y-
+// coordinates of the cursor position because these macros return incorrect results
+// on systems with multiple monitors. Systems with multiple monitors can have
+// negative x- and y- coordinates, and LOWORD and HIWORD treat the coordinates
+// as unsigned quantities.
+function MakePoint(const L: DWORD): TPoint; inline;
+Begin
+  Result := TPoint.Create(SmallInt(L and $FFFF), SmallInt(L shr 16));
+End;
+
 procedure TLinkbarWcl.DoPopupMenu(APt: TPoint; AShift: Boolean);
 var
   FPopupMenu: HMENU;
@@ -1450,7 +1484,7 @@ begin
   then SetMenuItemInfo(FPopupMenu, imCloseAll.Command, False, mii)
   else SetMenuItemInfo(FPopupMenu, imClose.Command, False, mii);
 
-  { Set icon for "New shortcut" menu item }
+  // Set icon for "New shortcut" menu item
   iconsize := GetSystemMetrics(SM_CXSMICON);
   hIco := LoadImage(GetModuleHandle('shell32.dll'), MakeIntResource(16769), IMAGE_ICON,
     iconsize, iconsize, LR_DEFAULTCOLOR);
@@ -1461,7 +1495,6 @@ begin
   mii.fMask := MIIM_BITMAP;
   mii.hbmpItem := hBmp;
   SetMenuItemInfo(FPopupMenu, imNewShortcut.Command, False, mii);
-  {}
 
   FillChar(mi, SizeOf(mi), 0);
   mi.cbSize := SizeOf(mi);
@@ -1482,7 +1515,7 @@ begin
         or TPM_NONOTIFY, APt.X, APt.Y, Handle, nil);
       DestroyMenu(FPopupMenu);
       if (command)
-      then PostMessage(Handle, SCMI_LB_ITEMS, 0, Integer(command));
+      then PostMessage(Handle, LM_CM_ITEMS, 0, Integer(command));
     end
     else begin
       // Execute Shell context menu + Linkbar context menu as submenu
@@ -1491,8 +1524,11 @@ begin
     end;
   finally
     FLockHotIndex := False;
+    if (WindowFromPoint(MakePoint(GetMessagePos)) <> Handle)
+    then begin
+      HotIndex := ITEM_NONE;
+    end;
     FLockAutoHide := False;
-    HotIndex := ITEM_NONE;
   end;
 
   DeleteObject(hBmp);
@@ -1500,32 +1536,31 @@ end;
 
 procedure TLinkbarWcl.OnFormJumplistDestroy(Sender: TObject);
 begin
-  FLockHotIndex := False;
-  HotIndex := ITEM_NONE;
-  FLockAutoHide := False;
-  DoAutoHide;
+  if (not (csDestroying in Self.ComponentState))
+  then begin
+    FLockHotIndex := False;
+    if (WindowFromPoint(MakePoint(GetMessagePos)) <> Handle)
+    then begin
+      HotIndex := ITEM_NONE;
+    end;
+    FLockAutoHide := False;
+    FCanAutoHide := True;
+    DoAutoHide;
+  end;
 end;
 
 procedure TLinkbarWcl.DoPopupJumplist(APt: TPoint; AShift: Boolean);
-const JUMPLIST_ALIGN: array[TScreenAlign] of TJumplistAlign = (jaLeft, jaTop, jaRight, jaBottom);
 var item: TLbItem;
-    appid: array[0..MAX_PATH] of Char;
     pt: TPoint;
     r: TRect;
-    fjl: TFormJumpList;
-    maxcount: Integer;
+    form: TFormJumpList;
 begin
   if (FJumplistShowMode <> jsmDisabled)
   then begin
     item := Items[FItemPopup];
-
-    { Check and show Jumplist }
-    maxcount := GetJumpListMaxCount;
-    if (maxcount > 0)
-       and GetAppInfoForLink(item.Pidl, appid)
-       and HasJumpList(appid)
+    form := TryCreateJumplist(Self, item.Pidl, FJumplistRecentMax);
+    if Assigned(form)
     then begin
-      oHint.Cancel;
       r := item.Rect;
       case ScreenAlign of
         saLeft:   pt := Point(r.Right, r.Bottom);
@@ -1534,11 +1569,11 @@ begin
         saBottom: pt := Point(r.CenterPoint.X, r.Top);
       end;
       MapWindowPoints(Handle, 0, pt, 1);
-      fjl := TFormJumpList.CreateNew(Self);
-      fjl.OnDestroy := OnFormJumplistDestroy;
-      if fjl.Popup(Handle, pt.X, pt.Y, JUMPLIST_ALIGN[ScreenAlign], appid,
-        item.Pidl, maxcount)
+
+      if form.Popup(Handle, pt, ScreenAlign)
       then begin
+        oHint.Cancel;
+        form.OnDestroy := OnFormJumplistDestroy;
         FLockHotIndex := True;
         FLockAutoHide := True;
         Exit;
@@ -1571,6 +1606,8 @@ begin
   else
     FItemPopup := ItemIndexByPoint(pt);
 
+  HotIndex := FItemPopup;
+
   shift := GetKeyState(VK_SHIFT) < 0;
 
   if (FItemPopup = ITEM_NONE)
@@ -1597,12 +1634,13 @@ procedure TLinkbarWcl.UpdateItemSizes;
 var
   r: TRect;
   w, h: Integer;
+  textHeight: Integer;
 begin
   // Calc text height
+  Canvas.Font := Screen.IconFont;
   if TextLayout = tlNone
-  then FTextHeight := 0
-  else FTextHeight := DrawText(Canvas.Handle, 'Wp', 2, r, DT_SINGLELINE or DT_NOCLIP or DT_CALCRECT);
-  Inc(FTextHeight, 2*TEXT_BORDER);
+  then textHeight := 0
+  else textHeight := DrawText(Canvas.Handle, 'Wp', 2, r, DT_SINGLELINE or DT_NOCLIP or DT_CALCRECT);
 
   // Calc margin, icon offset & button size
   case TextLayout of
@@ -1610,7 +1648,7 @@ begin
     begin
       // button size
       w := FItemMargin.cx + FIconSize + FTextOffset + FTextWidth + FItemMargin.cx;
-      h := FItemMargin.cy + Max(FIconSize, FTextHeight) + FItemMargin.cy;
+      h := FItemMargin.cy + Max(FIconSize, textHeight) + FItemMargin.cy;
       // icon offset
       if TextLayout = tlRight
       then FIconOffset.X := FItemMargin.cx
@@ -1619,26 +1657,26 @@ begin
       // text rect
       if TextLayout = tlRight
       then FTextRect := Bounds( FItemMargin.cx + FIconSize + FTextOffset,
-        (h - FTextHeight) div 2, FTextWidth, FTextHeight )
-      else FTextRect := Bounds( FItemMargin.cx, (h - FTextHeight) div 2,
-        FTextWidth, FTextHeight );
+        (h - textHeight) div 2, FTextWidth, textHeight )
+      else FTextRect := Bounds( FItemMargin.cx, (h - textHeight) div 2,
+        FTextWidth, textHeight );
     end;
   tlTop, tlBottom:
     begin
       // button size
       w := FItemMargin.cx + Max(FIconSize, FTextWidth) + FItemMargin.cx;
-      h := FItemMargin.cy + FIconSize + FTextOffset + FTextHeight + FItemMargin.cy;
+      h := FItemMargin.cy + FIconSize + FTextOffset + textHeight + FItemMargin.cy;
       // icon offset
       FIconOffset.X := (w - FIconSize) div 2;
       if textlayout = tlBottom
       then FIconOffset.Y := FItemMargin.cy
-      else FIconOffset.Y := FItemMargin.cy + FTextHeight + FTextOffset;
+      else FIconOffset.Y := FItemMargin.cy + textHeight + FTextOffset;
       // text rect
       if textlayout = tlBottom
       then FTextRect := Bounds( FTextOffset, FItemMargin.cy + FIconSize + FTextOffset,
-        w - 2*FTextOffset, FTextHeight )
+        w - 2*FTextOffset, textHeight )
       else FTextRect := Bounds( FTextOffset, FItemMargin.cy,
-        w - 2*FTextOffset, FTextHeight );
+        w - 2*FTextOffset, textHeight );
     end;
   else
     begin
@@ -1662,7 +1700,6 @@ procedure TLinkbarWcl.SetIsLightStyle(AValue: Boolean);
 begin
   if AValue = FIsLightStyle then Exit;
   FIsLightStyle := AValue;
-  if IsWindows8OrAbove then FIsLightStyle := False;
   ThemeInitData(Handle, FIsLightStyle);
 end;
 
@@ -1698,15 +1735,19 @@ end;
 
 procedure TLinkbarWcl.SetPressedIndex(AValue: integer);
 begin
-  if AValue = FItemPressed then Exit;
+  if AValue = FPressedIndex then Exit;
   oHint.Cancel;
-  FItemPressed := AValue;
-  DrawItem(BmpMain, FHotIndex, True, FItemPressed <> ITEM_NONE);
+  FPressedIndex := AValue;
+
+  if (FPressedIndex <> FHotIndex)
+  then HotIndex := FPressedIndex;
+
+  DrawItem(BmpMain, FHotIndex, True, FPressedIndex <> ITEM_NONE);
   UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain);
 end;
 
 procedure TLinkbarWcl.SetHotIndex(AValue: integer);
-var 
+var
   r: TRect;
   Pt: TPoint;
   HA: TAlignment;
@@ -1722,15 +1763,15 @@ begin
   if FHotIndex >= 0
   then begin // restore pred selected item
     r := Items[FHotIndex].Rect;
-    BitBlt(BmpMain.Canvas.Handle, r.Left, r.Top, r.Width, r.Height,
-      CBmpSelectedItem.Canvas.Handle, 0, 0, SRCCOPY);
+    BitBlt(BmpMain.Dc, r.Left, r.Top, r.Width, r.Height,
+      CBmpSelectedItem.Dc, 0, 0, SRCCOPY);
   end;
   FHotIndex := AValue;
   if FHotIndex >= 0 then
   begin // store current item
     r := Items[FHotIndex].Rect;
-    BitBlt(CBmpSelectedItem.Canvas.Handle, 0, 0, r.Width, r.Height,
-      BmpMain.Canvas.Handle, r.Left, r.Top, SRCCOPY);
+    BitBlt(CBmpSelectedItem.Dc, 0, 0, r.Width, r.Height,
+      BmpMain.Dc, r.Left, r.Top, SRCCOPY);
   end;
 
   DrawItem(BmpMain, FHotIndex, True, False); // draw current selected item
@@ -1753,7 +1794,7 @@ begin
           Pt.X := Items[FHotIndex].Rect.CenterPoint.X;
           Pt.Y := Items[FHotIndex].Rect.Bottom + TOOLTIP_OFFSET;
           VA := taAlignBottom;
-          HA := taCenter;        
+          HA := taCenter;
         end;
       saRight:
         begin
@@ -1767,7 +1808,7 @@ begin
           Pt.X := Items[FHotIndex].Rect.CenterPoint.X;
           Pt.Y := Items[FHotIndex].Rect.Top - TOOLTIP_OFFSET;
           VA := taAlignTop;
-          HA := taCenter;          
+          HA := taCenter;
         end
       else begin
         HA := taLeftJustify;
@@ -1786,7 +1827,6 @@ procedure TLinkbarWcl.SetHotkeyInfo(AValue: THotkeyInfo);
 begin
   FHotkeyInfo := AValue;
   if (AutoHide)
-     // (AutoShowMode = smHotKey)
   then RegisterHotkeyNotify(Handle, FHotkeyInfo)
   else UnregisterHotkeyNotify(Handle);
 end;
@@ -1801,18 +1841,27 @@ end;
 
 procedure TLinkbarWcl.SetSortAlphabetically(AValue: Boolean);
 begin
+  if (FSortAlphabetically = AValue)
+  then Exit;
+
   FSortAlphabetically := AValue;
+  // Save setting
+  TSettings.Write(FSettingsFileName, INI_SORT_AB, FSortAlphabetically);
+
   if FSortAlphabetically
   then begin
     Items.Sort;
-    oAppBar.AppBarPosChanged;
+    RecreateMainBitmap(BmpMain.Width, BmpMain.Height);
+    UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain);
   end;
 end;
 
 procedure TLinkbarWcl.SetStayOnTop(AValue: Boolean);
 const FORM_STYLE: array[Boolean] of TFormStyle = (fsNormal, fsStayOnTop);
 begin
-  if FStayOnTop = AValue then Exit;
+  if (FStayOnTop = AValue)
+  then Exit;
+
   FStayOnTop := AValue;
   Self.FormStyle := FORM_STYLE[FStayOnTop];
 
@@ -1843,7 +1892,7 @@ begin
   FBeforeAutoHideBound := Bounds(AX, AY, AWidth, AHeight);
   RecreateMainBitmap(AWidth, AHeight);
 
-  if AutoHide and FAutoHiden
+  if (AutoHide and FAutoHiden)
   then r := FAfterAutoHideBound
   else r := FBeforeAutoHideBound;
 
@@ -1854,6 +1903,18 @@ end;
 procedure TLinkbarWcl.QueryHideEvent(Sender: TObject; AEnabled: boolean);
 begin
   FAutoHide := AEnabled;
+end;
+
+procedure TLinkbarWcl.UpdateBackgroundColor;
+begin
+  ThemeGetTaskbarColor(FSysBackgroundColor, FLookMode);
+end;
+
+function TLinkbarWcl.GetBackgroundColor: Cardinal;
+begin
+  if (FUseBkgndColor)
+  then Result := FBackgroundColor
+  else Result := FSysBackgroundColor;
 end;
 
 procedure TLinkbarWcl.UpdateWindowSize;
@@ -1905,138 +1966,184 @@ begin
   Result := Integer((uLParam shr 16) and $FFFF);
 end;
 
+procedure TLinkbarWcl.FormResize(Sender: TObject);
+begin
+  if not FCreated
+  then Exit;
+  UpdateBlur;
+end;
+
 procedure TLinkbarWcl.WndProc(var Msg: TMessage);
-var i: Integer;
 begin
   case Msg.Msg of
-    // DWM Messaages
     WM_THEMECHANGED:
       begin
+        inherited;
         Msg.Result := 0;
+        if not FCreated then Exit;
         ThemeInitData(Handle, IsLightStyle);
-        UpdateItemSizes;
+        Exit;
       end;
-    WM_DWMCOLORIZATIONCOLORCHANGED, WM_SYSCOLORCHANGE:
+    WM_SETTINGCHANGE:
+      begin
+        inherited;
+        if (not FCreated)
+           //or (Msg.WParam <> SPI_GETICONTITLELOGFONT)
+        then Exit;
+        UpdateItemSizes;
+        RecreateMainBitmap(BmpMain.Width, BmpMain.Height);
+        UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain);
+        Exit;
+      end;
+    CM_FONTCHANGED:
+      begin
+        inherited;
+        if not FCreated then Exit;
+        UpdateItemSizes;
+        RecreateMainBitmap(BmpMain.Width, BmpMain.Height);
+        UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain);
+        Exit;
+      end;
+    WM_SYSCOLORCHANGE:
+      begin
+        inherited;
+        if not FCreated then Exit;
+        HotIndex := ITEM_NONE;
+        RecreateMainBitmap(BmpMain.Width, BmpMain.Height);
+        RecreateButtonBitmap(FButtonSize.Width, FButtonSize.Height);
+        UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain);
+        Exit;
+      end;
+    WM_DWMCOLORIZATIONCOLORCHANGED:
       begin
         Msg.Result := 0;
+        if not FCreated then Exit;
+
+        UpdateBackgroundColor;
+
+        if IsWindows10
+        then ThemeSetWindowAccentPolicy10(Handle, FLookMode, BackgroundColor);
+
         // In Windows 8+ theme color may changed smoothly
-        i := HotIndex;
-        FHotIndex := ITEM_NONE;
-        RecreateMainBitmap(BmpMain.Width, BmpMain.Height);
-        RecreateButtonBitmap(ButtonSize.Width, ButtonSize.Height);
-        if i = ITEM_NONE
-        then UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain)
-        else HotIndex := i;
+        HotIndex := ITEM_NONE;
+        RecreateMainBitmap(BmpMain.Width, BmpMain.Height); // <== THIS
+        RecreateButtonBitmap(FButtonSize.Width, FButtonSize.Height);
+        UpdateWindow(Handle, BoundsRect, ScreenAlign, BmpMain);
       end;
     WM_DWMCOMPOSITIONCHANGED:
       // NOTE: As of Windows 8, DWM composition is always enabled, so this message is
       // not sent regardless of video mode changes.
       begin
+        inherited;
         Msg.Result := 0;
+        if not FCreated then Exit;
         ThemeInitData(Handle, IsLightStyle);
         UpdateItemSizes;
         UpdateBlur;
       end;
-    { TODO: Provide this message for Windows Vista
-    WM_DWMWINDOWMAXIMIZE: {}
-    WM_SIZE:
+    WM_ACTIVATE:
       begin
-        Msg.Result := 0;
-        UpdateBlur;
-      end;
-    WM_SETFOCUS:
-      begin
-        Msg.Result := 0;
-        FCanAutoHide := False;
+        //Msg.Result := 0;
       end;
     WM_KILLFOCUS:
       begin
-        Msg.Result := 0;
+        inherited;
+        //Msg.Result := 0;
         if (csDestroying in ComponentState)
         then Exit;
         FCanAutoHide := not Assigned(FrmProperties);
         DoAutoHide;
+        Exit;
       end;
     { Display stste changed (count/size/rotate) }
     WM_DISPLAYCHANGE:
-    begin
-      Msg.Result := 0;
-      // force update Screen
-      FMonitorNum := Self.Monitor.MonitorNum; // or Screen.MonitorFromWindow(0, mdNull);
-      oAppBar.MonitorNum := FMonitorNum;
-      oAppBar.AppBarPosChanged;
-    end;
+      begin
+        inherited;
+        Msg.Result := 0;
+        if not FCreated then Exit;
+        // force update Screen
+        FMonitorNum := Self.Monitor.MonitorNum; // or Screen.MonitorFromWindow(0, mdNull);
+        oAppBar.MonitorNum := FMonitorNum;
+        oAppBar.AppBarPosChanged;
+        Exit;
+      end;
+    { Delayed auto show (timer) }
+    WM_TIMER:
+      begin
+        case Msg.WParam of
+          TIMER_AUTO_SHOW:
+            begin
+              KillTimer(Handle, TIMER_AUTO_SHOW);
+              DoAutoShow;
+              Exit;
+            end;
+          TIMER_AUTO_HIDE:
+            begin
+              KillTimer(Handle, TIMER_AUTO_HIDE);
+              DoAutoHide;
+              Exit;
+            end;
+        end;
+      end;
     { Messages from ShellContextMenu }
-    SCMI_SH_RENAME:
+    LM_CM_RENAME:
       begin
         DoRenameItem(FItemPopup);
         Exit;
       end;
-    SCMI_LB_ITEMS:
+    LM_CM_ITEMS:
       begin
         DoPopupMenuItemExecute(Msg.LParam);
         Exit;
       end;
-    SCMI_LB_INVOKE:
+    LM_CM_INVOKE:
       begin
         JumpListClose;
         Exit;
       end;
     { WatchDir stop }
-    WM_STOPDIRWATCH:
+    LM_STOPDIRWATCH:
       begin
         StopDirWatch;
         Exit;
       end;
     { Bit Bucket image changed }
-    WM_LB_SHELLNOTIFY:
-    begin
-      UpdateBitBuckets;
-      Exit;
-    end;
-    { Delayed auto show (timer) }
-    WM_TIMER:
-    begin
-      case Msg.WParam of
-        TIMER_AUTO_SHOW:
-          begin
-            KillTimer(Handle, TIMER_AUTO_SHOW);
-            DoAutoShow;
-            Exit;
-          end;
-        TIMER_AUTO_HIDE:
-          begin
-            KillTimer(Handle, TIMER_AUTO_HIDE);
-            DoAutoHide;
-            Exit;
-          end;
+    LM_SHELLNOTIFY:
+      begin
+        UpdateBitBuckets;
+        Exit;
       end;
-    end
-  else
-    inherited WndProc(Msg);
+    { Settings/Rename dialog destroyed }
+    LM_DOAUTOHIDE:
+      begin
+        FCanAutoHide := not Focused;
+        DoAutoHide;
+        Exit;
+      end;
   end;
+
+  inherited WndProc(Msg);
 end;
 
 function SetForegroundWindowInternal(AWnd: HWND): HWND;
 var ip: TInput; // This structure will be used to create the keyboard input event.
 begin
-  Result := 0;
-
   if not IsWindow(AWnd)
-  then Exit;
+  then Exit(0);
 
   Result := GetForegroundWindow;
+
+  // First try plain SetForegroundWindow
+  SetForegroundWindow(AWnd);
+  if (AWnd = GetForegroundWindow)
+  then Exit;
 
   // Set up a generic keyboard event.
   FillChar(ip, SizeOf(ip), 0);
   ip.Itype := INPUT_KEYBOARD;
-  ip.ki.wScan := 0; // hardware scan code for key
-  ip.ki.time := 0;
-	ip.ki.dwExtraInfo := 0;
-
   // Press the "Alt" key
 	ip.ki.wVk := VK_MENU; // virtual-key code for the "Alt" key
-	ip.ki.dwFlags := 0; // 0 for key press
+	ip.ki.dwFlags := 0;   // 0 for key press
 	SendInput(1, ip, SizeOf(ip));
 
   //Sleep(100); //Sometimes SetForegroundWindow will fail and the window will flash instead of it being show. Sleeping for a bit seems to help.
@@ -2056,20 +2163,18 @@ begin
      and (Msg.LParamHi = FHotkeyInfo.KeyCode)
      and (Msg.LParamLo = FHotkeyInfo.Modifiers)
      and AutoHide
-     //and (FAutoShowMode = smHotkey)
   then begin
-    FHotkeyPressed := True;
     if (FAutoHiden)
     then begin
-      DoAutoShow;
       FPrevForegroundWnd := SetForegroundWindowInternal(Handle);
+      FCanAutoHide := False;
+      DoAutoShow;
     end
     else begin
-      SetForegroundWindowInternal(FPrevForegroundWnd);
+      //SetForegroundWindow(FPrevForegroundWnd);
       // Linkbar will be hidden when it loses Focus
       //DoAutoHide;
     end;
-    FHotkeyPressed := False;
     Exit;
   end;
 
@@ -2095,11 +2200,6 @@ begin
   then mi.Click;
 end;
 
-procedure TLinkbarWcl.PropertiesFormDestroyed;
-begin
-  DoAutoHide;
-end;
-
 procedure TLinkbarWcl.imPropertiesClick(Sender: TObject);
 begin
   if Assigned(FrmProperties)
@@ -2118,7 +2218,7 @@ begin
   Result := True;
   if ( GetClassName(wnd, buf, Length(buf)) > 0 )
      and (buf = TLinkbarWcl.ClassName)
-  then PostMessage(wnd, WM_STOPDIRWATCH, 0, 0);
+  then PostMessage(wnd, LM_STOPDIRWATCH, 0, 0);
 end;
 
 function EnumWindowProcClose(wnd: HWND; lParam: LPARAM): BOOL; stdcall;
@@ -2145,6 +2245,7 @@ end;
 procedure TLinkbarWcl.imLockBarClick(Sender: TObject);
 begin
   FLockLinkbar := not FLockLinkbar;
+  TSettings.Write(FSettingsFileName, INI_LOCK_BAR, FLockLinkbar);
 end;
 
 procedure TLinkbarWcl.imAddBarClick(Sender: TObject);
@@ -2184,7 +2285,7 @@ begin
        and (td.ModalResult = mrOk)
     then begin
       FRemoved := True;
-      DeleteFile(FPreferencesFileName);
+      DeleteFile(FSettingsFileName);
       if (tfVerificationFlagChecked in td.Flags)
       then begin
         StopDirWatch;
@@ -2212,17 +2313,6 @@ begin
   Result := MulDiv(X, Self.PixelsPerInch, 96);
 end;
 
-// Macros from windowsx.h:
-// Important  Do not use the LOWORD or HIWORD macros to extract the x- and y-
-// coordinates of the cursor position because these macros return incorrect results
-// on systems with multiple monitors. Systems with multiple monitors can have
-// negative x- and y- coordinates, and LOWORD and HIWORD treat the coordinates
-// as unsigned quantities.
-function MakePoint(const L: DWORD): TPoint; inline;
-Begin
-  Result := TPoint.Create(SmallInt(L and $FFFF), SmallInt(L shr 16));
-End;
-
 procedure TLinkbarWcl.DoAutoHide;
 var r: TRect;
 begin
@@ -2234,6 +2324,7 @@ begin
   if FCanAutoHide and not FAutoHiden
   then begin
     FAutoHiden := True;
+    HotIndex := ITEM_NONE;
     r := FBeforeAutoHideBound;
     case ScreenAlign of
       saTop: r.Bottom := r.Top + ScaleDimension(AUTOHIDE_SIZE);
@@ -2254,15 +2345,24 @@ begin
   pt := MakePoint(GetMessagePos);
   if (AutoHide)
      and (FAutoHiden)
-     and (FHotkeyPressed or (WindowFromPoint(pt) = Handle))
-     //(FAutoShowMode <> smHotKey)
+     and ((not FCanAutoHide) or (WindowFromPoint(pt) = Handle))
   then begin
     FAutoHiden := False;
     MoveWindow(Handle, FBeforeAutoHideBound.Left, FBeforeAutoHideBound.Top,
       FBeforeAutoHideBound.Width, FBeforeAutoHideBound.Height, False);
     UpdateWindow(Handle, FBeforeAutoHideBound, ScreenAlign, BmpMain);
-    Self.OnContextPopup :=  FormContextPopup;
+    Self.OnContextPopup := FormContextPopup;
   end;
+end;
+
+procedure TLinkbarWcl.DoDelayedAutoHide(const ADelay: Cardinal);
+begin
+  if (not AutoHide)
+  then Exit;
+
+  if (ADelay = 0)
+  then DoAutoHide
+  else SetTimer(Handle, TIMER_AUTO_HIDE, ADelay, nil);
 end;
 
 procedure TLinkbarWcl.DoDelayedAutoShow;
@@ -2287,7 +2387,7 @@ procedure TLinkbarWcl.FormMouseLeave(Sender: TObject);
 begin
   HotIndex := -1;
   if (FAutoShowMode = smMouseHover) or FCanAutoHide
-  then SetTimer(Handle, TIMER_AUTO_HIDE, TIMER_AUTO_HIDE_DELAY, nil);// DoAutoHide;
+  then DoDelayedAutoHide(TIMER_AUTO_HIDE_DELAY);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2358,19 +2458,20 @@ begin
       pd := ButtonSize.cy div 6;
       if ( AValue.Y < (r.Top+pd) )
       then part := -1
-        else if ( AValue.Y > (r.Bottom-pd) )
-        then part := 1
-          else part := 0;
+      else if ( AValue.Y > (r.Bottom-pd) )
+           then part := 1
+           else part := 0;
     end
     else begin
       pd := ButtonSize.cx div 6;
       if ( AValue.X < (r.Left+pd) )
       then part := -1
-        else if ( AValue.X > (r.Right-pd) )
-        then part := 1
-          else part := 0;
+      else if ( AValue.X > (r.Right-pd) )
+           then part := 1
+           else part := 0;
     end;
-    if (part = 1) and (index <> FDragIndex)
+    if (part = 1)
+       and (index <> FDragIndex)
     then begin index := index + 1; part := -1; end;
     if index > (Items.Count-1)
     then index := ITEM_NONE;
@@ -2386,8 +2487,8 @@ begin
   if (FItemDropPosition <> ITEM_NONE) then
   begin
     r := _FLastDropRect;
-    BitBlt(BmpMain.Canvas.Handle, r.Left, r.Top, r.Width, r.Height,
-      CBmpDropPosition.Canvas.Handle, 0, 0, SRCCOPY);
+    BitBlt(BmpMain.Dc, r.Left, r.Top, r.Width, r.Height,
+      CBmpDropPosition.Dc, 0, 0, SRCCOPY);
   end;
 
   FItemDropPosition := index;
@@ -2397,8 +2498,8 @@ begin
     r := GetItemDropRect(FItemDropPosition, part);
     _FLastDropRect := r;
 
-    BitBlt(CBmpDropPosition.Canvas.Handle, 0, 0, r.Width, r.Height,
-      BmpMain.Canvas.Handle, r.Left, r.Top, SRCCOPY);
+    BitBlt(CBmpDropPosition.Dc, 0, 0, r.Width, r.Height,
+      BmpMain.Dc, r.Left, r.Top, SRCCOPY);
 
     if (part = 0)
     then begin
@@ -2407,7 +2508,7 @@ begin
       DrawItem(BmpMain, FItemDropPosition, False, False, False);
     end
     else begin
-      gpDrawer := BmpMain.ToGPGraphics;
+      gpDrawer := TGpGraphics.Create(BmpMain.Dc);//BmpMain.ToGPGraphics;
       gpBrush := TGPSolidBrush.Create(TGPColor.Create($ff000000));
       gpDrawer.FillRectangle(gpBrush, TGPRect.Create(r));
       gpBrush.Color := TGPColor.Create($ffffffff);
@@ -2457,7 +2558,7 @@ begin
 
   if FDragingItem
   then begin
-    FSortAlphabetically := False;
+    SortAlphabetically := False;
     if FItemDropPosition = ITEM_NONE
     then Items.Move(FDragIndex, Items.Count-1)
     else Items.Move(FDragIndex, FItemDropPosition);
@@ -2467,11 +2568,12 @@ begin
   else tmrUpdate.Enabled := True;
 end;
 
-procedure TLinkbarWcl.QueryDragImage(out ABitmap: TBitmap; out AOffset: TPoint);
+procedure TLinkbarWcl.QueryDragImage(out ABitmap: THBitmap; out AOffset: TPoint);
 begin
-  ABitmap := TBitmap.Create;
-  ABitmap.PixelFormat := pf32bit;
-  ABitmap.Canvas.Brush.Style := bsClear;
+  if not StyleServices.Enabled
+  then Exit;
+
+  ABitmap := THBitmap.Create(32);
   ABitmap.SetSize(ButtonSize.cx, ButtonSize.cy);
 
   DrawItem(ABitmap, FDragIndex, False, True, False, True);
@@ -2523,7 +2625,7 @@ begin
   begin
     i := FindItemByHash(StrToHash(AFileName));
     if (i <> ITEM_NONE)
-    then Items.Delete(i);
+    then DeleteItem(i);
   end;
   waModified:
   begin
@@ -2562,20 +2664,15 @@ var i: Integer;
 begin
   tmrUpdate.Enabled := False;
 
-  i := 0;
-  while (i < Items.Count) do
+  for i := Items.Count-1 downto 0 do
   begin
     item := Items[i];
     if item.NeedLoad
     then begin
       if item.LoadFromFile(item.FileName)
-      then begin
-        Items.LoadIcon(item);
-        Inc(i);
-      end
-      else Items.Delete(i);
+      then Items.LoadIcon(item)
+      else DeleteItem(i);
     end
-    else Inc(i);
   end;
 
   if FSortAlphabetically
@@ -2598,7 +2695,7 @@ begin
     if not DirectoryExists(WorkDir)
     then begin
       FRemoved := True;
-      DeleteFile(FPreferencesFileName);
+      DeleteFile(FSettingsFileName);
       Close;
     end;
   end;
@@ -2606,15 +2703,31 @@ end;
 
 procedure TLinkbarWcl.SetEnableAeroGlass(AValue: Boolean);
 begin
-  if not IsWindows8And8Dot1
+  if (not IsWindows8And8Dot1)
+     or (AValue = FEnableAeroGlass)
   then Exit;
 
-  if (AValue = FEnableAeroGlass)
-  then Exit;
   FEnableAeroGlass := AValue;
   ExpAeroGlassEnabled := FEnableAeroGlass;
-  ThemeSetWindowAttribute(Handle);
+  ThemeSetWindowAttribute78(Handle);
   UpdateBlur;
+end;
+
+procedure TLinkbarWcl.SetLookMode(AValue: TLookMode);
+begin
+  if (not IsWindows10)
+  then Exit;
+  FLookMode := AValue;
+  UpdateBackgroundColor;
+  ThemeSetWindowAccentPolicy10(Handle, FLookMode, BackgroundColor);
+end;
+
+procedure TLinkbarWcl.SetUseBkgndColor(AValue: Boolean);
+begin
+  if (AValue = FUseBkgndColor)
+  then Exit;
+  FUseBkgndColor := AValue;
+  UpdateBackgroundColor;
 end;
 
 end.
