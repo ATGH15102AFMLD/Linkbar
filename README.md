@@ -4,6 +4,7 @@
 ![Delphi](https://img.shields.io/badge/Delphi-XE3-red.svg)
 ![Windows](https://img.shields.io/badge/Windows-Vista--10-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
+[![Join the chat at https://gitter.im/Linkbar/linkbar](https://badges.gitter.im/Linkbar/linkbar.svg)](https://gitter.im/Linkbar/linkbar?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
 
 
 What is Linkbar ?
