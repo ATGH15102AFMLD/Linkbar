@@ -12,6 +12,8 @@ What is Linkbar ?
 Linkbar is a free source code desktop toolbar. Running in the MS Windows Vista+ environment, its use is governed by
 MIT License.
 
+![Preview](metadata/screenshots/preview.png)
+
 Description
 -------------------------------
 See [README.txt](https://github.com/ATGH15102AFMLD/Linkbar/blob/master/exe/README.txt)
