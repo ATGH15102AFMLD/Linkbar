@@ -24,4 +24,4 @@ Build with Embarcadero Delphi XE3 or higher
 
 Download
 -------------------------------
-From [SourceForge](https://sourceforge.net/projects/linkbar/)
+[![Download Linkbar](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/linkbar/files/latest/download)
