@@ -18,16 +18,16 @@ uses
   function GetUIObjectOfPidl(AWnd: HWND; const APidl: PItemIDList;
     const ARiid: TIID; out ppv): HRESULT;
 
-  function GetUIObjectOfFile(AWnd: HWND; const AFileName: String;
+  function GetUIObjectOfFile(AWnd: HWND; const AFileName: string;
     const ARiid: TIID; out ppv): HRESULT;
 
-  function LBCreateCommandParam(const AKey, AValue: string): string;
+  function LBCreateCommandParam(const AKey: string; const AValue: string = ''): string;
 
-  procedure LBShellExecute(const AWnd: HWND; const AOperation, AFileName: String;
-    const AParameters: String = ''; const ADirectory: String = '';
+  procedure LBShellExecute(const AWnd: HWND; const AOperation, AFileName: string;
+    const AParameters: string = ''; const ADirectory: string = '';
     const AShowCmd: Integer = SW_SHOWNORMAL);
 
-  function LBCreateProcess(const AApplicationName: String;
+  function LBCreateProcess(const AApplicationName: string;
     const ACommandLine: string = ''): Boolean;
 
   function GetLinkbarRoamingFolderPath: string;
@@ -135,7 +135,7 @@ begin
   end;
 end;
 
-function GetUIObjectOfFolder(AWnd: HWND; const APath: String;
+function GetUIObjectOfFolder(AWnd: HWND; const APath: string;
   const ARiid: TIID; out ppv): HRESULT;
 var
   pDesktop: IShellFolder;
@@ -171,7 +171,7 @@ begin
   end;
 end;
 
-function GetUIObjectOfFile(AWnd: HWND; const AFileName: String;
+function GetUIObjectOfFile(AWnd: HWND; const AFileName: string;
   const ARiid: TIID; out ppv): HRESULT;
 var
   pidl: PItemIDList;
@@ -193,7 +193,7 @@ begin
   end;
 end;
 
-function LBCreateCommandParam(const AKey, AValue: string): string;
+function LBCreateCommandParam(const AKey: string; const AValue: string): string;
 var quote: string;
 begin
   if Pos(' ', AValue) > 0
@@ -202,8 +202,8 @@ begin
   Result := ' /' + AKey + quote + AValue + quote;
 end;
 
-procedure LBShellExecute(const AWnd: HWND; const AOperation, AFileName: String;
-  const AParameters: String = ''; const ADirectory: String = '';
+procedure LBShellExecute(const AWnd: HWND; const AOperation, AFileName: string;
+  const AParameters: string = ''; const ADirectory: string = '';
   const AShowCmd: Integer = SW_SHOWNORMAL);
 var
   ExecInfo: TShellExecuteInfo;
@@ -296,7 +296,7 @@ begin
   end;
 end;
 
-function LBCreateProcess(const AApplicationName: String;
+function LBCreateProcess(const AApplicationName: string;
   const ACommandLine: string = ''): Boolean;
 var SI: TStartupInfo;
     PI: TProcessInformation;

@@ -75,7 +75,6 @@ object HotkeyEdit: THotkeyEdit
       AllowAllUp = True
       GroupIndex = 3
       Caption = 'Alt'
-      Flat = True
       OnClick = btnShiftClick
       ExplicitLeft = 56
     end
@@ -88,7 +87,6 @@ object HotkeyEdit: THotkeyEdit
       AllowAllUp = True
       GroupIndex = 2
       Caption = 'Ctrl'
-      Flat = True
       OnClick = btnShiftClick
       ExplicitLeft = 16
     end
@@ -101,7 +99,6 @@ object HotkeyEdit: THotkeyEdit
       AllowAllUp = True
       GroupIndex = 1
       Caption = 'Shift'
-      Flat = True
       OnClick = btnShiftClick
       ExplicitLeft = 35
     end
@@ -114,7 +111,6 @@ object HotkeyEdit: THotkeyEdit
       AllowAllUp = True
       GroupIndex = 4
       Caption = 'Win'
-      Flat = True
       OnClick = btnShiftClick
       ExplicitLeft = 182
     end

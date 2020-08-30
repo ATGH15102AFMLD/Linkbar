@@ -26,61 +26,75 @@ object LinkbarWcl: TLinkbarWcl
   object pMenu: TPopupMenu
     Left = 8
     Top = 8
-    object imNewShortcut: TMenuItem
-      Caption = 'New shortcut'
-      OnClick = imNewShortcutClick
-    end
-    object imOpenWorkdir: TMenuItem
-      Caption = 'Open working directory'
-      GroupIndex = 2
-      OnClick = imOpenWorkdirClick
+    object imNew: TMenuItem
+      Caption = 'New'
+      GroupIndex = 3
+      object imNewShortcut: TMenuItem
+        Caption = 'Shortcut'
+        GroupIndex = 3
+        OnClick = imNewShortcutClick
+      end
+      object imNewSeparator: TMenuItem
+        Caption = 'Separator'
+        GroupIndex = 3
+        OnClick = imNewSeparatorClick
+      end
+      object imAddBar: TMenuItem
+        Caption = 'Linkbar'
+        GroupIndex = 3
+        OnClick = imAddBarClick
+      end
     end
     object N2: TMenuItem
       Caption = '-'
-      GroupIndex = 2
-    end
-    object imAddBar: TMenuItem
-      Caption = 'Create linkbar...'
-      GroupIndex = 2
-      OnClick = imAddBarClick
+      GroupIndex = 3
     end
     object imRemoveBar: TMenuItem
       Caption = 'Delete the linkbar...'
-      GroupIndex = 2
+      GroupIndex = 3
       OnClick = imRemoveBarClick
+    end
+    object imOpenWorkdir: TMenuItem
+      Tag = 10
+      Caption = 'Open working directory'
+      GroupIndex = 3
+      OnClick = imOpenWorkdirClick
     end
     object N1: TMenuItem
       Caption = '-'
-      GroupIndex = 2
+      GroupIndex = 3
     end
     object imLockBar: TMenuItem
       AutoCheck = True
       Caption = 'Lock the linkbar'
-      GroupIndex = 2
+      GroupIndex = 3
       OnClick = imLockBarClick
     end
     object imSortAlphabet: TMenuItem
       Caption = 'Sort alphabetically'
-      GroupIndex = 2
+      GroupIndex = 3
       OnClick = imSortAlphabetClick
     end
     object imProperties: TMenuItem
       Caption = 'Settings...'
-      GroupIndex = 2
+      GroupIndex = 3
       OnClick = imPropertiesClick
     end
     object N3: TMenuItem
       Caption = '-'
-      GroupIndex = 2
+      GroupIndex = 3
     end
     object imClose: TMenuItem
+      Tag = 20
       Caption = 'Close'
-      GroupIndex = 2
+      GroupIndex = 3
+      ShortCut = 32884
       OnClick = imCloseClick
     end
     object imCloseAll: TMenuItem
+      Tag = 10
       Caption = 'Close all'
-      GroupIndex = 2
+      GroupIndex = 3
       OnClick = imCloseAllClick
     end
   end

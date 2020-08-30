@@ -88,8 +88,7 @@ begin
   // IDropTargetHelper
   // minimum support client: Windows 2000 Professional, Windows XP
   // minimum support server: Windows Server 2003
-  if Succeeded(CoCreateInstance(CLSID_DragDropHelper, nil, CLSCTX_ALL,
-    IID_IDropTargetHelper, FDragHelper))
+  if Succeeded(CoCreateInstance(CLSID_DragDropHelper, nil, CLSCTX_ALL, IID_IDropTargetHelper, FDragHelper))
   then OleCheck(RegisterDragDrop(Handle, Self));
   FIsDragDrop := False;
 
@@ -307,7 +306,8 @@ var
 begin
   QueryDragImage(bmp, pt);
 
-  if not Assigned(bmp) then Exit(False);
+  if (not Assigned(bmp))
+  then Exit(False);
 
   FillChar(ASdi, SizeOf(ASdi), 0);
   ASdi.sizeDragImage.cx := bmp.Width;
@@ -315,14 +315,12 @@ begin
   ASdi.ptOffset := pt;
   ASdi.crColorKey := CLR_NONE;
 
-  ASdi.hbmpDragImage := CreateBitmap(ASdi.sizeDragImage.cx,
-    ASdi.sizeDragImage.cy, 1, 32, nil);
+  ASdi.hbmpDragImage := CreateBitmap(ASdi.sizeDragImage.cx, ASdi.sizeDragImage.cy, 1, 32, nil);
   if (ASdi.hbmpDragImage <> 0)
   then begin
     DC := CreateCompatibleDC(HWND_DESKTOP);
     hbmPrev := SelectObject(DC, ASdi.hbmpDragImage);
-    BitBlt(DC, 0, 0, ASdi.sizeDragImage.cx, ASdi.sizeDragImage.cy,
-      bmp.Dc, 0, 0, SRCCOPY);
+    BitBlt(DC, 0, 0, ASdi.sizeDragImage.cx, ASdi.sizeDragImage.cy, bmp.Dc, 0, 0, SRCCOPY);
     SelectObject(DC, hbmPrev);
     DeleteDC(DC);
   end;
@@ -343,8 +341,7 @@ begin
     // IDragSourceHelper2
     // minimum support client: Windows Vista
     // minimum support server: Windows Server 2008
-    Result := CoCreateInstance(CLSID_DragDropHelper, nil, CLSCTX_ALL,
-      IID_IDragSourceHelper2, pdsh2);
+    Result := CoCreateInstance(CLSID_DragDropHelper, nil, CLSCTX_ALL, IID_IDragSourceHelper2, pdsh2);
     if Succeeded(Result)
     then begin
       if CreateDragImage(sdi)
@@ -359,8 +356,7 @@ begin
     // IDragSourceHelper
     // minimum support client: Windows 2000 Professional, Windows XP
     // minimum support server: Windows Server 2003
-    Result := CoCreateInstance(CLSID_DragDropHelper, nil, CLSCTX_ALL,
-      IID_IDragSourceHelper, pdsh);
+    Result := CoCreateInstance(CLSID_DragDropHelper, nil, CLSCTX_ALL, IID_IDragSourceHelper, pdsh);
     if Succeeded(Result)
     then begin
       if CreateDragImage(sdi)
@@ -394,7 +390,7 @@ begin
   end;
 end;
 
-function DoGetFileName(FileName: String): string;
+function DoGetFileName(FileName: string): string;
 var SeparatorIdx: Integer;
 begin
   Result := '';
@@ -411,7 +407,7 @@ end;
 
 procedure TLinkbarCustomFrom.SetWorkDir(AValue: string);
 var
-  lstr: String;
+  lstr: string;
   lsfgao: DWORD;
 begin
   lstr := ExpandFileName(IncludeTrailingPathDelimiter(AValue));

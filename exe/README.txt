@@ -8,10 +8,10 @@ Note:
 1) Linkbar support Windows Vista and above
 2) Linkbar work with .lnk, .url and .website files
 
-Version: 1.6.8
+Version: 1.6.9 beta 5
 License type: Freeware
 OS: Windows Vista/7/8/8.1/10
-Languages: English (default), Сhinese-Simplified, French, German, Greek, Japanese, Korean, Polish, Russian, Spanish, localization support
+Languages: English (default), Brazilian, Сhinese-Simplified, French, Indonesian, Italian, German, Greek, Japanese, Korean, Polish, Russian, Spanish, localization support
 Email: linkbar@yandex.ru (use English or Russian)
 
 ===============================================================================
@@ -27,6 +27,7 @@ Email: linkbar@yandex.ru (use English or Russian)
 - MSDN
 - Near users
 - Ru-Board community
+- StackOverflow
 - StartIsBack
 - Unknown programmers from internet
 
@@ -53,6 +54,58 @@ Email: linkbar@yandex.ru (use English or Russian)
 ===============================================================================
 
 == History
+===============================================================================
+
+== TODO:
+
+add: Localization updates
+add: For Windows 10 support dark mode for dialogs
+add: For Windows 10 support high contrast theme for panel and Jumplist
+add: Drag&Drop in Jumplists
+
+===============================================================================
+
+== Version 1.6.9 beta 5 (Aug, 2020):
+
+add: Option "Tooltips show"
+add: Jumplist window aligned to top of an item
+add: Linkbar Jumplist
+add: Command line option "-ca" to close all open panels
+
+===============================================================================
+
+== Version 1.6.9 beta 4 (May, 2020):
+
+add: Separators
+add: Settings reorganized
+fix: Exception while Drag&Drop when style services disabled
+
+===============================================================================
+
+== Version 1.6.9 beta 3 (Apr, 2020):
+
+fix: Windows 7/8/8.1 startup exception "Access violation at address 00000000 in module. Read of address 00000000."
+
+===============================================================================
+
+== Version 1.6.9 beta 2 (Apr, 2020):
+
+add: For Windows 10 support dark mode for tooltips and context menus
+add: For Windows 10 improve drawing buttons and Jumplist
+fix: Missing 32-bit version
+fix: Cannot open context menu (e.g. Windows 10 Calculator)
+
+===============================================================================
+
+== Version 1.6.9 beta 1 (Apr, 2020):
+
+add: Brazilian Portuguese localization (Feijionico)
+add: Indonesian localization (EkoPrasetiyo)
+add: Italian localization (BrezzaTM)
+add: Option "Items align"
+add: For Windows 10 option "Color Mode"
+add: For Windows 10 improve Jumplist drawing
+
 ===============================================================================
 
 == Version 1.6.8 general release (Mar, 2018):

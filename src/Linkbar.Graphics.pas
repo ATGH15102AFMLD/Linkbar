@@ -7,6 +7,8 @@
 
 unit Linkbar.Graphics;
 
+{$i linkbar.inc}
+
 interface
 
 uses Windows;
@@ -143,7 +145,7 @@ begin
 
   DeleteDc;
 
-  FDc := CreateCompatibleDC(0);
+  FDc := CreateCompatibleDC(HWND_DESKTOP);
   FBmp0 := SelectObject(FDc, FHandle);
 end;
 

@@ -14,11 +14,11 @@ uses
 
   procedure ReduceSysMenu(AWnd: HWND);
   procedure PreventSizing(var AResult: LPARAM);
-  function RemovePrefix(A: String): String;
+  function RemovePrefix(A: string): string;
 
 implementation
 
-function RemovePrefix(A: String): String;
+function RemovePrefix(A: string): string;
 begin
   Result := StringReplace(A, '&', '', []);
 end;

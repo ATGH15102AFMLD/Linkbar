@@ -41,7 +41,7 @@ type
     gABRegistered: boolean;
     FOwnerOriginalWndProc: TWndMethod;
     FAutoHide: boolean;
-    FSide: TScreenAlign;
+    FAlign: TPanelAlign;
     FQuerySizing: TQuerySizingEvent;
     FQuerySized: TQuerySizedEvent;
     FQueryAutoHide: TQueryHideEvent;
@@ -52,7 +52,7 @@ type
     ahform: THiddenForm;
     FTaskbarCreated: DWORD;
     procedure SetAutoHide(AValue: boolean);
-    procedure SetSide(AValue: TScreenAlign);
+    procedure SetAlign(AValue: TPanelAlign);
     procedure SetStayOnTop(AValue: Boolean);
     procedure AppBWndProc(var Msg: TMessage);
     function GetIsVertical: boolean;
@@ -65,7 +65,7 @@ type
     MonitorNum: Integer;
     AutoHideMonitorNum: Integer;
     constructor Create(AOwner: TComponent); override;
-    constructor Create2(AOwner: TComponent; iSide: TScreenAlign; iAutoHide: boolean); overload;
+    constructor Create2(AOwner: TComponent; AAlign: TPanelAlign; iAutoHide: boolean); overload;
     destructor Destroy; override;
     procedure Loaded; override;
     property Vertical: boolean read GetIsVertical;
@@ -74,14 +74,14 @@ type
   published
     property StayOnTop: Boolean read FStayOnTop write SetStayOnTop;
     property AutoHide: boolean read FAutoHide write SetAutoHide;
-    property Side: TScreenAlign read FSide write SetSide default saTop;
+    property Align: TPanelAlign read FAlign write SetAlign default EPanelAlignTop;
     property QuerySizing: TQuerySizingEvent read FQuerySizing write FQuerySizing;
     property QuerySized: TQuerySizedEvent read FQuerySized write FQuerySized;
     property QueryAutoHide: TQueryHideEvent read FQueryAutoHide write FQueryAutoHide;
   end;
 
-  function IsVertical(const AEdge: TScreenAlign): Boolean; inline;
-  function IsHorizontal(const AEdge: TScreenAlign): Boolean; inline;
+  function IsVertical(const AEdge: TPanelAlign): Boolean; inline;
+  function IsHorizontal(const AEdge: TPanelAlign): Boolean; inline;
 
 implementation
 
@@ -140,23 +140,23 @@ begin
   end;
 end;
 
-function IsVertical(const AEdge: TScreenAlign): Boolean; inline;
+function IsVertical(const AEdge: TPanelAlign): Boolean; inline;
 begin
-  Result := (AEdge = saLeft) or (AEdge = saRight);
+  Result := (AEdge = EPanelAlignLeft) or (AEdge = EPanelAlignRight);
 end;
 
-function IsHorizontal(const AEdge: TScreenAlign): Boolean; inline;
+function IsHorizontal(const AEdge: TPanelAlign): Boolean; inline;
 begin
-  Result := (AEdge = saTop) or (AEdge = saBottom);
+  Result := (AEdge = EPanelAlignTop) or (AEdge = EPanelAlignBottom);
 end;
 
-function ScreenEdgeToEdge(const se: TScreenAlign): UINT;
+function ScreenEdgeToEdge(const Align: TPanelAlign): UINT;
 begin
-  case se of
-    saTop:    Result := ABE_TOP;
-    saBottom: Result := ABE_BOTTOM;
-    saLeft:   Result := ABE_LEFT;
-    saRight:  Result := ABE_RIGHT;
+  case Align of
+    EPanelAlignTop:    Result := ABE_TOP;
+    EPanelAlignBottom: Result := ABE_BOTTOM;
+    EPanelAlignLeft:   Result := ABE_LEFT;
+    EPanelAlignRight:  Result := ABE_RIGHT;
   else
     Result := ABE_TOP;
   end;
@@ -312,10 +312,10 @@ begin
     raise Exception.Create('Sorry, can''t do this without an owner');
 end;
 
-constructor TAccessBar.Create2(AOwner: TComponent; iSide: TScreenAlign; iAutoHide: boolean);
+constructor TAccessBar.Create2(AOwner: TComponent; AAlign: TPanelAlign; iAutoHide: boolean);
 begin
   Create(AOwner);
-  FSide := iSide;
+  FAlign := AAlign;
   FAutoHide := iAutoHide;
 end;
 
@@ -351,7 +351,7 @@ begin
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize:= SizeOf(rabd);
   rabd.hWnd:= FHandle;
-  rabd.uEdge := ScreenEdgeToEdge(FSide);
+  rabd.uEdge := ScreenEdgeToEdge(FAlign);
   rabd.rc := Screen.Monitors[MonitorNum].BoundsRect;
 
   if not AutoHide then
@@ -399,7 +399,7 @@ begin
   then ahform.SetMonitor(MonitorNum);
 end;
 
-procedure TAccessBar.SetSide(AValue: TScreenAlign);
+procedure TAccessBar.SetAlign(AValue: TPanelAlign);
 var  rabd: TAppBarData;
      hr: Cardinal;
 begin
@@ -409,7 +409,7 @@ begin
     FillChar(rabd, SizeOf(rabd), 0);
     rabd.cbSize := SizeOf(rabd);
     rabd.hWnd := FHandle;
-    rabd.uEdge := ScreenEdgeToEdge(FSide);
+    rabd.uEdge := ScreenEdgeToEdge(FAlign);
     rabd.lParam := 0;
     // Multi Monitor support for Windows 8
     if IsWindows8OrAbove
@@ -424,7 +424,7 @@ begin
     then raise Exception.Create(SysErrorMessage(GetLastError()));
   end;
 
-  FSide := AValue;
+  FAlign := AValue;
 
   if AutoHide
   then AppBarSetAutoHide(TRUE)
@@ -451,7 +451,7 @@ end;
 
 function TAccessBar.GetIsVertical: boolean;
 begin
-  Result := IsVertical(FSide);
+  Result := IsVertical(FAlign);
 end;
 
 procedure TAccessBar.AppBWndProc(var Msg: TMessage);
@@ -462,7 +462,7 @@ begin
       begin
         if (AutoHide)
         then
-          SetSide(FSide)
+          SetAlign(FAlign)
         else begin
           UnregisterAppBar;
           RegisterAppBar;
@@ -521,7 +521,7 @@ begin
   FillChar(rabd, SizeOf(rabd), 0);
   rabd.cbSize := SizeOf(rabd);
   rabd.hWnd := FHandle;
-  rabd.uEdge := ScreenEdgeToEdge(FSide);
+  rabd.uEdge := ScreenEdgeToEdge(FAlign);
   if AEnabled
   then rabd.lParam:= -1
   else rabd.lParam:= 0;

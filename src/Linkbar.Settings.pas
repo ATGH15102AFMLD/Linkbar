@@ -5,39 +5,40 @@
 
 unit Linkbar.Settings;
 
+{$i linkbar.inc}
+
 interface
 
-uses System.IniFiles;
+uses System.Types, System.IniFiles, Linkbar.Consts, System.Generics.Collections;
 
 type
-  TSettings = record
+  TSettingsFile = record
   private
     FIni: TMemIniFile;
   public
-    procedure Open(const FileName: String);
-    procedure Update;
+    procedure Open(const FileName: string);
     procedure Close;
     function Read(const Ident, Default: string): string; overload;
     function Read(const Ident: string; Default: Boolean): Boolean; overload;
     function Read(const Ident: string; Default: Integer): Integer; overload;
     function Read(const Ident: string; Default, Min, Max: Integer): Integer; overload;
-    function Read<TEnum:record>(const Ident: string; Default: Integer): TEnum; overload;
-    procedure Write(const Ident, Value: String); overload;
+    function Read<TEnum:record>(const Ident: string; const Default: TEnum): TEnum; overload;
+    procedure Write(const Ident, Value: string); overload;
     procedure Write(const Ident: string; Value: Boolean); overload;
     procedure Write(const Ident: string; Value: Integer); overload;
   public
-    class function IsValid(const FileName: String): Boolean; static;
+    class function IsValid(const FileName: string): Boolean; static;
     class procedure Write(const FileName, Ident: string; Value: Boolean); overload; static;
     class procedure Write(const FileName, Ident: string; Value: Integer); overload; static;
   end;
 
 implementation
 
-uses System.SysUtils, System.TypInfo, Linkbar.Consts;
+uses System.SysUtils, System.TypInfo, System.Variants, System.Math;
 
 { Return True if <FileName> is valid = Working direcrory exists }
-class function TSettings.IsValid(const FileName: String): Boolean;
-var s: TSettings;
+class function TSettingsFile.IsValid(const FileName: string): Boolean;
+var s: TSettingsFile;
 begin
   s.Open(FileName);
   Result := DirectoryExists( s.Read(INI_DIR_LINKS, DEF_DIR_LINKS) );
@@ -45,58 +46,53 @@ begin
 end;
 
 { Write Boolean <Value> to settings file <FileName> }
-class procedure TSettings.Write(const FileName, Ident: string; Value: Boolean);
-var s: TSettings;
+class procedure TSettingsFile.Write(const FileName, Ident: string; Value: Boolean);
+var s: TSettingsFile;
 begin
   s.Open(FileName);
   s.Write(Ident, Value);
-  s.Update;
   s.Close;
 end;
 
 { Write Integer <Value> to settings file <FileName> }
-class procedure TSettings.Write(const FileName, Ident: string; Value: Integer);
-var s: TSettings;
+class procedure TSettingsFile.Write(const FileName, Ident: string; Value: Integer);
+var s: TSettingsFile;
 begin
   s.Open(FileName);
   s.Write(Ident, Value);
-  s.Update;
   s.Close;
 end;
 
-{ TSettings }
+{ TSettingsFile }
 
-procedure TSettings.Open(const FileName: String);
+procedure TSettingsFile.Open(const FileName: string);
 begin
   FIni := TMemIniFile.Create(FileName);
+  FIni.AutoSave := True;
 end;
 
-procedure TSettings.Update;
+procedure TSettingsFile.Close;
 begin
-  FIni.UpdateFile;
+  if Assigned(FIni)
+  then FIni.Free;
 end;
 
-procedure TSettings.Close;
-begin
-  FIni.Free;
-end;
-
-function TSettings.Read(const Ident, Default: string): string;
+function TSettingsFile.Read(const Ident, Default: string): string;
 begin
   Result := FIni.ReadString(INI_SECTION_MAIN, Ident, Default);
 end;
 
-function TSettings.Read(const Ident: string; Default: Boolean): Boolean;
+function TSettingsFile.Read(const Ident: string; Default: Boolean): Boolean;
 begin
   Result := FIni.ReadBool(INI_SECTION_MAIN, Ident, Default);
 end;
 
-function TSettings.Read(const Ident: string; Default: Integer): Integer;
+function TSettingsFile.Read(const Ident: string; Default: Integer): Integer;
 begin
   Result := FIni.ReadInteger(INI_SECTION_MAIN, Ident, Default);
 end;
 
-function TSettings.Read(const Ident: string; Default, Min, Max: Integer): Integer;
+function TSettingsFile.Read(const Ident: string; Default, Min, Max: Integer): Integer;
 begin
   Result := Read(Ident, Default);
   if (Result > Max) or (Result < Min)
@@ -104,18 +100,24 @@ begin
 end;
 
 { Read enum }
-function TSettings.Read<TEnum>(const Ident: string; Default: Integer): TEnum;
+function TSettingsFile.Read<TEnum>(const Ident: string; const Default: TEnum): TEnum;
 var info: PTypeInfo;
     data: PTypeData;
     value: Integer;
+    def: Integer;
 begin
   info := PTypeInfo(TypeInfo(TEnum));
 {$IFDEF DEBUG}
   if (info = nil) or (info^.Kind <> tkEnumeration)
   then raise Exception.Create('Not an enumeration type');
 {$ENDIF}
+  case Sizeof(TEnum) of
+    1: def := PByte(@Default)^;
+    2: def := PWord(@Default)^;
+    4: def := PCardinal(@Default)^;
+  end;
   data := GetTypeData(info);
-  value := Read(Ident, Default, data^.MinValue, data^.MaxValue);
+  value := Read(Ident, def, data^.MinValue, data^.MaxValue);
   case Sizeof(TEnum) of
     1: PByte(@Result)^ := value;
     2: PWord(@Result)^ := value;
@@ -123,17 +125,17 @@ begin
   end;
 end;
 
-procedure TSettings.Write(const Ident, Value: String);
+procedure TSettingsFile.Write(const Ident, Value: string);
 begin
   FIni.WriteString(INI_SECTION_MAIN, Ident, Value);
 end;
 
-procedure TSettings.Write(const Ident: string; Value: Boolean);
+procedure TSettingsFile.Write(const Ident: string; Value: Boolean);
 begin
   FIni.WriteBool(INI_SECTION_MAIN, Ident, Value);
 end;
 
-procedure TSettings.Write(const Ident: string; Value: Integer);
+procedure TSettingsFile.Write(const Ident: string; Value: Integer);
 begin
   FIni.WriteInteger(INI_SECTION_MAIN, Ident, Value);
 end;

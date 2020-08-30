@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit MyHint;
@@ -8,7 +8,9 @@ unit MyHint;
 interface
 
 uses 
-  Windows, Vcl.Controls, System.Classes, Winapi.CommCtrl, Winapi.Messages, System.SysUtils;
+  System.Classes, System.SysUtils,
+  Winapi.Windows, Winapi.CommCtrl, Winapi.Messages,
+  Vcl.Controls;
 
 type
   TTooltipHintWindow = class(THintWindow)

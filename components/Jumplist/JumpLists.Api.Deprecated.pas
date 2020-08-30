@@ -217,7 +217,7 @@ end;
 procedure CreateAppResolver;
 var t: Cardinal;
 begin
-	if (not IsJumplistAvailable)
+  if (not IsJumplistAvailable)
   then Exit;
 
   t := GetTickCount;
@@ -284,15 +284,16 @@ function GetPropertyStoreString(AStore: IPropertyStore; AKey: TPropertyKey): str
 var val: TPropVariant;
 begin
   Result := '';
-	FillChar(val, SizeOf(val), 0);
-	if Succeeded( AStore.GetValue(AKey, val) )
-	then begin
-		if (val.vt = VT_LPWSTR) or (val.vt = VT_BSTR)
+  FillChar(val, SizeOf(val), 0);
+  if Succeeded( AStore.GetValue(AKey, val) )
+  then begin
+    if (val.vt = VT_LPWSTR) 
+       or (val.vt = VT_BSTR)
     then Result := val.pwszVal
-      else if (val.vt = VT_LPSTR)
-		  then Result := String(val.pszVal);
-	end;
-	PropVariantClear(val);
+    else if (val.vt = VT_LPSTR)
+         then Result := string(val.pszVal);
+  end;
+  PropVariantClear(val);
 end;
 
 // Returns true if the given shortcut has a jumplist (it may be empty)
@@ -306,7 +307,7 @@ begin
   if (not IsJumplistAvailable)
   then Exit;
   // the jumplist is stored in a file in the CustomDestinations folder as described here:
-	// http://www.4n6k.com/2011/09/jump-list-forensics-appids-part-1.html
+  // http://www.4n6k.com/2011/09/jump-list-forensics-appids-part-1.html
 
   if Failed( SHGetKnownFolderPath(FOLDERID_Recent, KF_FLAG_DEFAULT, 0, pszRecent) )
   then Exit(false);
@@ -708,7 +709,7 @@ begin
   hr := StgOpenStorageEx(PChar(path2), STGM_READ or STGM_TRANSACTED,
     STGFMT_STORAGE, 0, nil, nil, IStorage, pStorage);
 
-	if Succeeded( hr )
+  if Succeeded( hr )
   then begin
     if Succeeded( pStorage.OpenStream('DestList', nil, STGM_READ or STGM_SHARE_EXCLUSIVE, 0, pStream) )
     then begin
@@ -1146,11 +1147,11 @@ var pszRecent: PChar;
     name: array[0..1024] of Char;
     bNewStorage: Boolean;
     maxStream: Integer;
-    streamName: String;
+    streamName: string;
     pLink: IShellLink;
     text: array[0..INFOTIPSIZE] of Char;
     pStore: IPropertyStore;
-    args, str: String;
+    args, str: string;
     pidl: PItemIDList;
     pName: PChar;
     pItem: IShellItem;
@@ -1179,7 +1180,7 @@ begin
   jumpItem := AList.Groups[AGroupIdx].Items[AItemIdx];
 
   // open the jumplist file
-	if Failed( StgOpenStorageEx(PChar(path), STGM_READWRITE or STGM_TRANSACTED,
+  if Failed( StgOpenStorageEx(PChar(path), STGM_READWRITE or STGM_TRANSACTED,
     STGFMT_STORAGE, 0, nil, nil, IStorage, pStorage) )
   then pStorage := nil;
 

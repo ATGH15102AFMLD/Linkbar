@@ -10,10 +10,11 @@ unit Jumplists.Form;
 interface
 
 uses
-	Windows, System.SysUtils, System.Types, System.Classes, Graphics,
+  GdiPlus,
+  Winapi.Windows, Winapi.Messages, Winapi.ShlObj, Winapi.CommCtrl,
+  System.SysUtils, System.Types, System.Classes, Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Menus, System.Generics.Collections, System.UITypes,
-  Winapi.Messages, Winapi.ShlObj,	Winapi.CommCtrl, JumpLists.Api_2,
-  Linkbar.Consts, Linkbar.Graphics;
+  JumpLists.Api_2, Linkbar.Consts, Linkbar.Graphics, Linkbar.Hint;
 
 type
   TFormJumpList = class(TForm)
@@ -39,19 +40,21 @@ type
       TIconCache = TDictionary<Cardinal, Integer>;
   private
     FJumpList: TJumpList;
-    FAppId: String;
+    FAppId: string;
     FAppExe: PItemIDList;
     FWnd: HWND;
     FMaxCount: Integer;
     FPopupMenu: TPopupMenu;
     FIconSize: Integer;
-    FX, FY: Integer;
-    FAlign: TScreenAlign;
+    //FX, FY: Integer;
+    FItemRect: TRect;
+    FAlign: TPanelAlign;
     FVtList: TVtList;
     FPopupMenuVisible: Boolean;
     FHotSelectedByMouse: Boolean;
     oBgBmp: THBitmap;
     oFont: TFont;
+    oSymFont: TFont;
     oIconCache: TIconCache;
     RectBody: TRect;
     RectFooter: TRect;
@@ -93,14 +96,11 @@ type
     function PinSelected: boolean; inline;
     function Index: Integer;// inline;
   private
-    TipHwnd: HWND;
+    ToolTip: TTooltip32;
     TipPinText: string;
     TipUnpinText: string;
     TipPosOffset: TPoint;
-    TipToolInfo: TToolInfo;
     TipShowTime, TipHideTime: Cardinal;
-    TipMonitorRect: TRect;
-    SelfBoundsRect: TRect;
     procedure PrepareTooltips;
     function GetDescription(const AItem: TVtItem; const AText: PChar; ASize: Integer): Boolean;
     procedure WMTimer(var Message: TMessage); message WM_TIMER;
@@ -108,9 +108,10 @@ type
     ListWidth: Integer;
     ItemWidth: Integer;
     ItemHeight: Integer;
+    SeparatorHeight: Integer;
     ItemSpacing: Integer;
-    ItemPadding: Integer;
-    ItemMargin: Integer;
+    ItemPadding: TSize;
+    ItemMargin: TSize;
     TextOffset: Integer;
     TextGroupOffset: Integer;
     PinButtonWidth: Integer;
@@ -124,24 +125,24 @@ type
   protected
     procedure CreateParams(var Params: TCreateParams); override;
     procedure PaintWindow(DC: HDC); override;
-    procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
-    procedure WMKillFocus(var Message: TWMKillFocus); message WM_KILLFOCUS;
-    procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
+    procedure WndProc(var Msg: TMessage); override;
+    //procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
+    //procedure WMKillFocus(var Message: TWMKillFocus); message WM_KILLFOCUS;
+    //procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   public
     constructor CreateNew(AOwner: TComponent; Dummy: Integer = 0); override;
     destructor Destroy; override;
-    function Popup(AWnd: HWND; APt: TPoint; AAlign: TScreenAlign): Boolean;
+    function Popup(AWnd: HWND; AItemRect: TRect; AAlign: TPanelAlign): Boolean;
   end;
 
-  function TryCreateJumplist(AOwner: TComponent; const APidl: PItemIDList;
-    const AMaxRecentCount: Integer): TFormJumpList;
+  function TryCreateJumplist(const AOwner: TComponent; const APidl: PItemIDList; AMaxRecentCount: Integer): TFormJumpList;
   procedure JumpListClose;
 
 implementation
 
 uses Math, Vcl.Themes, Winapi.Dwmapi, Winapi.ShellAPI, Winapi.ShLwApi,
   Winapi.ActiveX, Winapi.UxTheme, Linkbar.OS, Linkbar.L10n, Linkbar.Shell,
-  Jumplists.Themes, ExplorerMenu, System.Win.Registry;
+  Jumplists.Theme, Linkbar.Theme, ExplorerMenu, System.Win.Registry;
 
 const
   ICI_NONE    = -1;
@@ -157,11 +158,13 @@ const
   TIMER_TOOLTIP_SHOW = 4;
   TIMER_TOOLTIP_HIDE = 5;
 
+  W10_SYMBOL_PIN   = $E718;
+  W10_SYMBOL_UNPIN = $E77A;
+
 var
   _JumpList: TFormJumpList = nil;
 
-function TryCreateJumplist(AOwner: TComponent; const APidl: PItemIDList;
-  const AMaxRecentCount: Integer): TFormJumpList;
+function TryCreateJumplist(const AOwner: TComponent; const APidl: PItemIDList; AMaxRecentCount: Integer): TFormJumpList;
 var appid: array[0..MAX_PATH] of Char;
     list: TJumplist;
     g, i, count: Integer;
@@ -257,6 +260,8 @@ const
 var reg: TRegistry;
     buf: array[0..16] of Byte;
 begin
+  if IsWindows10 then Exit(False);
+
   reg := TRegistry.Create;
   try
     // check "Animate controls and elements inside windows"
@@ -276,6 +281,18 @@ begin
   finally
     reg.Free;
   end;
+end;
+
+procedure SetDwmMargins(const AHandle: HWND);
+var
+  margins: TMargins;
+begin
+  margins.cxLeftWidth    := 1;
+  margins.cxRightWidth   := 1;
+  margins.cyTopHeight    := 1;
+  margins.cyBottomHeight := 1;
+  DwmExtendFrameIntoClientArea(AHandle, margins);
+  SetWindowPos(AHandle, 0, 0, 0, 0, 0, SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -389,13 +406,24 @@ begin
 end;
 
 constructor TFormJumpList.CreateNew(AOwner: TComponent; Dummy: Integer = 0);
-var color: Cardinal;
-    info: TSHFileInfo;
-    hr: HRESULT;
-    h: HMODULE;
-    icon: HICON;
+var
+  hr: HRESULT;
+  h: HMODULE;
+  sii: TSHStockIconInfo;
 begin
+  Jumplists.Theme.ThemeJlUpdate;
+
   inherited;
+
+  if IsWindows10
+  then begin
+    GlassFrame.Left    := 1;
+    GlassFrame.Top     := 1;
+    GlassFrame.Right   := 1;
+    GlassFrame.Bottom  := 1;
+    GlassFrame.Enabled := True;
+  end;
+
   _JumpList := Self;
   FormStyle := fsStayOnTop;
   KeyPreview := True;
@@ -418,21 +446,27 @@ begin
 
   if IsWindows10
   then begin
-    ItemMargin := 0;
-    ItemPadding := ScaleDimension(6);
-    ItemHeight := FIconSize + 2 * ItemPadding;
+    ItemMargin := TSize.Create(1 + ScaleDimension(1), ScaleDimension(8));
+    // (12, 7) OS 1909 build 18363.720
+    ItemPadding := TSize.Create(ScaleDimension(12), ScaleDimension(7));
+    ItemHeight := FIconSize + 2 * ItemPadding.cy;
+    SeparatorHeight := ScaleDimension(11);
     ItemSpacing := 0;
-    TextGroupOffset := ItemPadding;
+    TextGroupOffset := ItemPadding.cx;
     PinButtonWidth := ItemHeight;
+    TextOffset := FIconSize + 2 * ItemPadding.cx;
+
     FormOffset := 0;
   end
   else begin
-    ItemMargin := 7;
-    ItemPadding := 2;
-    ItemHeight := FIconSize + 2 * ItemPadding;
+    ItemMargin := TSize.Create(7, 7);
+    ItemPadding := TSize.Create(2, 2);
+    ItemHeight := FIconSize + 2 * ItemPadding.cy;
+    SeparatorHeight := ItemHeight;
     ItemSpacing := 2;
     TextGroupOffset := 0;
     PinButtonWidth := FIconSize + ScaleDimension(10);
+    TextOffset := ItemHeight + ScaleDimension(3);
 
     if (DwmCompositionEnabled)
     then FormOffset := ScaleDimension(3)
@@ -441,37 +475,49 @@ begin
          else FormOffset := -ScaleDimension(2);
   end;
 
-  ItemWidth := ListWidth - 2 * ItemMargin;
-  TextOffset := ItemHeight + ScaleDimension(3);
+  ItemWidth := ListWidth - 2 * ItemMargin.cx;
 
   hImageList := ImageList_Create(FIconSize, FIconSize, ILC_COLOR32 or ILC_MASK, 8, 8);
 
   // Add default blank icon (default icon for file with no extension)
-  if ( SHGetFileInfo('file', FILE_ATTRIBUTE_NORMAL, info, SizeOf(info),
-    SHGFI_USEFILEATTRIBUTES or SHGFI_ICON or SHGFI_SMALLICON) <> 0)
+  sii.cbSize := SizeOf(TSHStockIconInfo);
+  if SHGetStockIconInfo(SIID_DOCNOASSOC, SHGSI_ICON, sii) = S_OK
   then begin
-    ImageList_AddIcon(hImageList, info.hIcon);
-    DestroyIcon(info.hIcon);
+    ImageList_AddIcon(hImageList, sii.hIcon);
+    DestroyIcon(sii.hIcon);
   end;
+
   // Add pin and unpin icons
-  h := LoadLibraryEx(PChar('imageres.dll'), 0, LOAD_LIBRARY_AS_DATAFILE);
-  if (h <> 0)
+  if IsWindows10
   then begin
-    // unpin icon
-    icon := LoadImage(h, MakeIntResource(5100), IMAGE_ICON, FIconSize, FIconSize, LR_DEFAULTCOLOR);
-    if (icon <> 0)
+    // dummy icons, Windows 10 use symbol font
+    if SHGetStockIconInfo(SIID_DOCNOASSOC, SHGSI_ICON, sii) = S_OK
     then begin
-      ImageList_AddIcon(hImageList, icon);
-      DestroyIcon(icon);
+      ImageList_AddIcon(hImageList, sii.hIcon);
+      ImageList_AddIcon(hImageList, sii.hIcon);
+      DestroyIcon(sii.hIcon);
     end;
-    // pin icon
-    icon := LoadImage(h, MakeIntResource(5101), IMAGE_ICON, FIconSize, FIconSize, LR_DEFAULTCOLOR);
-    if (icon <> 0)
+  end
+  else begin
+    h := LoadLibraryEx(PChar('imageres.dll'), 0, LOAD_LIBRARY_AS_DATAFILE);
+    if (h <> 0)
     then begin
-      ImageList_AddIcon(hImageList, icon);
-      DestroyIcon(icon);
+      // unpin icon
+      var icon: HICON := LoadImage(h, MakeIntResource(5100), IMAGE_ICON, FIconSize, FIconSize, LR_DEFAULTCOLOR);
+      if (icon <> 0)
+      then begin
+        ImageList_AddIcon(hImageList, icon);
+        DestroyIcon(icon);
+      end;
+      // pin icon
+      icon := LoadImage(h, MakeIntResource(5101), IMAGE_ICON, FIconSize, FIconSize, LR_DEFAULTCOLOR);
+      if (icon <> 0)
+      then begin
+        ImageList_AddIcon(hImageList, icon);
+        DestroyIcon(icon);
+      end;
+      FreeLibrary(h);
     end;
-    FreeLibrary(h);
   end;
 
   // Get text colors for header and item
@@ -483,10 +529,19 @@ begin
   if IsWindows10
   then begin
     // For Windows 10
-    TextColorGroup := clSilver;
-    TextColorItem := clWhite;
-    TextColorItemSelected := clWhite;
-    TextColorItemNew := clBlack;
+    TextColorGroup := W10_JLIC_Text_Header;
+
+    if (GlobalLook = ELookLight)
+    then begin
+      TextColorItem := clBlack;
+      TextColorItemSelected := clBlack;
+      TextColorItemNew := clBlack;
+    end
+    else begin
+      TextColorItem := clWhite;
+      TextColorItemSelected := clWhite;
+      TextColorItemNew := clWhite;
+    end;
   end
   else begin
     // For Windows 7, 8, 8.1
@@ -495,6 +550,7 @@ begin
       hLvTheme := OpenThemeData(Handle, VSCLASS_LISTVIEW);
       if (hLvTheme <> 0)
       then begin
+        var color: Cardinal;
         hr := GetThemeColor(hLvTheme, LVP_GROUPHEADER, LVGH_OPEN, TMT_HEADING1TEXTCOLOR, color);
         if (hr = S_OK)
         then TextColorGroup := TColorRef(color);
@@ -511,8 +567,7 @@ begin
   end;
 
   // Get cursor size for tooltip offset
-  TipPosOffset.X := 0;
-  TipPosOffset.Y := GetCursorHeightMargin;
+  TipPosOffset := TPoint.Create(0, GetCursorHeightMargin);
 
   // Get tooltip show/hide delay
   TipShowTime := GetDoubleClickTime();
@@ -523,7 +578,6 @@ begin
   TipPinText := StripHotkey( L10NFind('Jumplist.PinTip', 'Pin to this list') );
 
   LastPinUnpinHash := 0;
-  TipHwnd := 0;
 
   FVtList := TVtList.Create;
   FVtList.Capacity := 16;
@@ -532,16 +586,25 @@ begin
   oFont := TFont.Create;
   oFont.Assign(Screen.IconFont);
 
+  oSymFont := TFont.Create;
+  oSymFont.Name := 'Segoe MDL2 Assets';
+  oSymFont.Height := FIconSize;
+
   oIconCache := TIconCache.Create(8 + FMaxCount);
 end;
 
 procedure TFormJumpList.CreateParams(var Params: TCreateParams);
 begin
   inherited CreateParams(Params);
-  Params.Style := WS_POPUP or WS_BORDER;
-  if (IsWindows7 and DwmCompositionEnabled)
-     or IsWindows8And8Dot1
-  then Params.Style := Params.Style or WS_THICKFRAME;
+
+  if IsWindows10
+  then Params.Style := WS_POPUP or WS_THICKFRAME or WS_CAPTION// or WS_SYSMENU or WS_MAXIMIZEBOX or WS_MINIMIZEBOX
+
+  else begin
+    Params.Style := WS_POPUP or WS_BORDER;
+    if (IsWindows7 and DwmCompositionEnabled) or IsWindows8And8Dot1
+    then Params.Style := Params.Style or WS_THICKFRAME;
+  end;
 
   Params.ExStyle := (Params.ExStyle or WS_EX_TOOLWINDOW) and not WS_EX_APPWINDOW;
 end;
@@ -549,12 +612,13 @@ end;
 destructor TFormJumpList.Destroy;
 begin
   _JumpList := nil;
-  DestroyWindow(TipHwnd);
+  ToolTip.Free;
   ImageList_Destroy(hImageList);
   FJumpList.Free;
   FVtList.Free;
   oBgBmp.Free;
   oFont.Free;
+  oSymFont.Free;
   oIconCache.Free;
   CloseThemeData(hLvTheme);
   ThemeJlDeinit;
@@ -605,7 +669,7 @@ var res: Integer;
     key: Cardinal;
     bUseFactory: Boolean;
     icoi: TIconInfo;
-    bmpi: Windows.BITMAP;
+    bmpi: BITMAP;
     pFactory: IShellItemImageFactory;
     hbmp: HBITMAP;
 begin
@@ -825,7 +889,7 @@ begin
     // Keyboard "Menu" button
     if (MousePos.X = -1)
        and (MousePos.Y = -1)
-    then pt := Point(vi.Rect.Left + ItemPadding + FIconSize div 2, vi.Rect.CenterPoint.Y)
+    then pt := Point(vi.Rect.Left + ItemPadding.cx + FIconSize div 2, vi.Rect.CenterPoint.Y)
     else pt := MousePos;
 
     if (vi.Style = vtItem)
@@ -839,7 +903,7 @@ begin
     then begin
       MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
       shift := (GetKeyState(VK_SHIFT) < 0);
-      // TODO: may will be need AlphaBlendAndClose and process messages after invokecommand
+      // TODO: may need AlphaBlendAndClose and process messages after invokecommand
       FPopupMenuVisible := True;
       ExplorerMenuPopup(FWnd, FAppExe, pt, shift, 0);
       FPopupMenuVisible := False;
@@ -1013,7 +1077,7 @@ procedure TFormJumpList.OnFormMouseDown(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   KillTimer(Handle, TIMER_TOOLTIP_SHOW);
-  SendMessage(TipHwnd, TTM_POP, 0, 0);
+  ToolTip.Hide;
 end;
 
 procedure TFormJumpList.AlphaBlendAndClose;
@@ -1024,7 +1088,60 @@ begin
   Close;
 end;
 
-procedure TFormJumpList.WMKillFocus(var Message: TWMKillFocus);
+procedure TFormJumpList.WndProc(var Msg: TMessage);
+begin
+  case Msg.Msg of
+    // Close
+    WM_KILLFOCUS:
+      begin
+        AlphaBlendAndClose;
+        Msg.Result := 0;
+      end;
+
+    // Disable window resize
+    WM_NCHITTEST:
+      begin
+        Msg.Result := HTCLIENT;
+        Exit;
+      end;
+
+    WM_ERASEBKGND:
+      begin
+        Msg.Result := 1;
+        Exit;
+      end;
+  end;
+
+  if IsWindows10
+  then begin
+    case Msg.Msg of
+      WM_NCCALCSIZE:
+        begin
+          if (Boolean(Msg.WParam) = True)
+          then begin
+            Msg.Result := 0;
+            Exit;
+          end;
+        end;
+
+      WM_NCACTIVATE:
+        begin
+          // Prevents window frame reappearing on window activation
+          // in "basic" theme, where no aero shadow is present.
+          //if not DwmCompositionEnabled
+          //then
+          begin
+            Msg.Result := 1;
+            Exit;
+          end;
+        end;
+    end;
+  end;
+
+  inherited WndProc(Msg);
+end;
+
+{procedure TFormJumpList.WMKillFocus(var Message: TWMKillFocus);
 // Close
 begin
   AlphaBlendAndClose;
@@ -1040,14 +1157,15 @@ end;
 procedure TFormJumpList.WMEraseBkgnd(var Message: TWMEraseBkgnd);
 begin
   Message.Result := 1;
-end;
+end;}
 
 procedure TFormJumpList.DrawJumplistItem(const ADc: HDC; const AIndex: Integer;
   const ASelected, APinActive: Boolean; ADrawBackground: Boolean = True);
 var vi: TVtItem;
     itemrect, pinrect: TRect;
     text: string;
-    state, index: Integer;
+    state: Integer;
+    ch: Char;
     jlgt: TJumpGroupeType;
     color: TColor;
     fnt0: HFONT;
@@ -1093,12 +1211,25 @@ begin
       else state := LB_JLS_HOT;
       ThemeJlDrawButton(ADc, LB_JLP_PIN_BUTTON, state, pinrect);
       // Pin button icon
-      if (jlgt = jgPinned)
-      then index := ICI_UNPIN
-      else index := ICI_PIN;
-      ImageList_Draw(hImageList, index, ADc,
+      if IsWindows10
+      then begin
+        SelectObject(ADc, oSymFont.Handle);
+        SetTextColor(ADc, ColorToRGB(TextColorItemSelected));
+        SetBkMode(ADc, TRANSPARENT);
+        if (jlgt = jgPinned)
+        then ch := Char(W10_SYMBOL_UNPIN)
+        else ch := Char(W10_SYMBOL_PIN);
+        TextOut(ADc,
           pinrect.Left + (PinButtonWidth - FIconSize) div 2,
-          pinrect.Top + ItemPadding, ILD_IMAGE);
+          pinrect.Top + ItemPadding.cy, @ch, 1);
+      end
+      else begin
+        ImageList_Draw(hImageList,
+          IfThen(jlgt = jgPinned, ICI_PIN, ICI_UNPIN), ADc,
+          pinrect.Left + (PinButtonWidth - FIconSize) div 2,
+          pinrect.Top + ItemPadding.cy, ILD_IMAGE);
+      end;
+
       // Main button
       if APinActive
       then state := LB_JLS_HOT
@@ -1114,7 +1245,7 @@ begin
 
   // Draw icon
   ImageList_Draw(hImageList, vi.Icon, ADc,
-    itemrect.Left + ItemPadding, itemrect.Top + ItemPadding, ILD_IMAGE);
+    itemrect.Left + ItemPadding.cx, itemrect.Top + ItemPadding.cy, ILD_IMAGE);
 
   // Draw caption
   if (vi.Style = vtFooter)
@@ -1144,14 +1275,13 @@ begin
 end;
 
 procedure TFormJumpList.PrepareBackground(const AWidth, AHeight: Integer);
-var i: Integer;
+var i, h: Integer;
     vi: TVtItem;
     tr, lr: TRect;
     text: string;
     fs: TFontStyles;
     hcinfo: THighContrast;
     dc: HDC;
-    brh0: HBRUSH;
     fnt0: HFONT;
     clr0: COLORREF;
     bck0: Integer;
@@ -1171,11 +1301,11 @@ begin
     SystemParametersInfo(SPI_GETHIGHCONTRAST, hcinfo.cbSize, @hcinfo, 0);
     if ((hcinfo.dwFlags and HCF_HIGHCONTRASTON) <> 0)
     then begin
-      lr := Rect(ItemMargin, RectBody.Bottom, RectBody.Right-ItemMargin, RectBody.Bottom + 1);
+      lr := Rect(ItemMargin.cx, RectBody.Bottom, RectBody.Right-ItemMargin.cx, RectBody.Bottom + 1);
       FillRect(dc, lr, GetSysColorBrush(COLOR_WINDOWTEXT));
     end
     else begin
-      lr := Rect(ItemMargin, RectBody.Bottom, RectBody.Right-ItemMargin, RectBody.Bottom + 2{3});
+      lr := Rect(ItemMargin.cx, RectBody.Bottom, RectBody.Right-ItemMargin.cy, RectBody.Bottom + 2{3});
       DrawEdge(dc, lr, BDR_RAISEDINNER, BF_RECT);
     end;
   end; {}
@@ -1204,18 +1334,22 @@ begin
         fnt0 := SelectObject(dc, oFont.Handle);
 
         // draw group header line
-        text := FJumpList.Groups[vi.Group].Name;
-        if IsWindows10
+        {if IsWindows10
         then begin
-          lr := Rect(vi.Rect.Left + ItemPadding, vi.Rect.Bottom-ScaleDimension(1),
-            vi.Rect.Right - ItemPadding, vi.Rect.Bottom);
-          brh0 := SelectObject(dc, GetStockObject(DC_BRUSH));
-          clr0 := SetDCBrushColor(dc, $555555);
+          lr := Rect(vi.Rect.Left + ItemPadding.cx, vi.Rect.Bottom-ScaleDimension(1),
+            vi.Rect.Right - ItemPadding.cy, vi.Rect.Bottom);
+
+          var brh0 := SelectObject(dc, GetStockObject(DC_BRUSH));
+          clr0 := SetDCBrushColor(dc, $ff0000);//$555555);
           FillRect(dc, lr, GetStockObject(DC_BRUSH));
           SetDCBrushColor(dc, clr0);
           SelectObject(dc, brh0);
-        end
-        else begin
+        end}
+
+        text := FJumpList.Groups[vi.Group].Name;
+
+        if not IsWindows10
+        then begin
           // calc text rect
           tr := vi.Rect;
           DrawText(dc, text, -1, tr,
@@ -1246,23 +1380,31 @@ begin
       begin
         if IsWindows10
         then begin
-          lr := Bounds(vi.Rect.Left + ItemPadding, vi.Rect.CenterPoint.Y,
-            vi.Rect.Width - ItemPadding*2, ScaleDimension(1));
-          brh0 := SelectObject(dc, GetStockObject(DC_BRUSH));
-          clr0 := SetDCBrushColor(dc, $555555);
-          FillRect(dc, lr, GetStockObject(DC_BRUSH));
-          SetDCBrushColor(dc, clr0);
-          SelectObject(dc, brh0);
+          h := ScaleDimension(1);
+          lr := Bounds(vi.Rect.Left + ItemPadding.cx, vi.Rect.CenterPoint.Y - (h div 2), vi.Rect.Width - ItemPadding.cx*2, h);
+          ThemeJlDrawSeparator(dc, lr);
         end
         else begin
           // calc and darw separator line
           lr := Bounds(vi.Rect.Left, vi.Rect.CenterPoint.Y-1, vi.Rect.Width, ScaleDimension(1));
-          DrawThemeBackground(hLvTheme, dc, LVP_GROUPHEADERLINE,
-            LVGHL_OPEN, lr, @lr);
+          DrawThemeBackground(hLvTheme, dc, LVP_GROUPHEADERLINE, LVGHL_OPEN, lr, @lr);
         end;
       end;
       //-----------------------------------------------------------------------
     end;
+  end;
+
+  if IsWindows10
+  then begin
+    // Black border for blending with NC area
+    lr := TRect.Create(0, 0, AWidth, AHeight);
+    case FAlign of
+      EPanelAlignLeft:   lr.Inflate(1, 0, 0, 0);
+      EPanelAlignTop:    lr.Inflate(0, 1, 0, 0);
+      EPanelAlignRight:  lr.Inflate(0, 0, 1, 0);
+      EPanelAlignBottom: lr.Inflate(0, 0, 0, 1);
+    end;
+    FrameRect(dc, lr, GetStockObject(BLACK_BRUSH));
   end;
 end;
 
@@ -1401,38 +1543,18 @@ begin
 end;
 
 procedure TFormJumpList.PrepareTooltips;
-var margin: TRect;
-    m: Integer;
+var
+  margin: Integer;
 begin
-  if (TipHwnd <> 0)
-  then DestroyWindow(TipHwnd);
+  if Assigned(ToolTip)
+  then ToolTip.Free;
 
-  // NOTE:
-  // A tooltip control always has the WS_POPUP and WS_EX_TOOLWINDOW window styles,
-  // regardless of whether you specify them when creating the control.
-  TipHwnd := CreateWindowEx(WS_EX_TOPMOST or WS_EX_TRANSPARENT,
-    TOOLTIPS_CLASS, nil, TTS_NOPREFIX or TTS_ALWAYSTIP,
-    0, 0, 0, 0, Handle, 0, HInstance, nil);
+  // Windows 7, classic themes, jumplist, tooltip have non-default margins (4,4,4,4) and font
+  if (StyleServices.Enabled)
+  then margin := 0
+  else margin := ScaleDimension(4);
 
-  if (TipHwnd <> 0)
-  then begin
-    SendMessage(TipHwnd, TTM_SETMAXTIPWIDTH, 0 , 400);
-
-    // Windows 7, classic themes, jumplist, tooltip have non-default margins (4,4,4,4) and font
-    if (not StyleServices.Enabled)
-    then begin
-      m := ScaleDimension(4);
-      margin := Rect(m,m,m,m);
-      SendMessage(TipHwnd, TTM_SETMARGIN, 0, LParam(@margin));
-      SendMessage(TipHwnd, WM_SETFONT, Wparam(Screen.IconFont.Handle), 0);
-    end;
-
-    FillChar(TipToolInfo, SizeOf(TipToolInfo), 0);
-    TipToolInfo.cbSize := SizeOf(TipToolInfo);
-    TipToolInfo.uFlags := TTF_TRACK or TTF_ABSOLUTE or TTF_TRANSPARENT;
-    TipToolInfo.uId := 1;
-    SendMessage(TipHwnd, TTM_ADDTOOL, 0, LParam(@TipToolInfo));
-  end;
+  ToolTip := TTooltip32.Create(Handle, margin);
 end;
 
 function FitTipRect(const r1, r2: TRect): TPoint;
@@ -1454,13 +1576,12 @@ begin
 end;
 
 procedure TFormJumpList.WMTimer(var Message: TMessage);
-var pt: TPoint;
+var i: Integer;
     vi: TVtItem;
-    tip: array[0..1024] of Char;
     jgt: TJumpGroupeType;
-    tr: TRect;
-    npt: TPoint;
-    i: Integer;
+    description: array[0..1024] of Char;
+    pt: TPoint;
+    tooltiptext: string;
 begin
   if (Message.WParam = TIMER_TOOLTIP_SHOW)
   then begin
@@ -1479,20 +1600,19 @@ begin
     if not (vi.Style in [vtItem])
     then Exit;
 
-    jgt := FJumpList.Groups[vi.Group].eType;
-
     if (not vi.Pinnable)
        or (not PinSelected)
     then begin
-      tip[0] := #0;
-      if (not GetDescription(vi, tip, Length(tip)))
+      description[0] := #0;
+      if (not GetDescription(vi, description, Length(description)))
       then Exit;
-      TipToolInfo.lpszText := tip;
+      tooltiptext := description;
     end
     else begin
+      jgt := FJumpList.Groups[vi.Group].eType;
       if (jgt = jgPinned)
-      then TipToolInfo.lpszText := PChar(TipUnpinText)
-      else TipToolInfo.lpszText := PChar(TipPinText);
+      then tooltiptext := TipUnpinText
+      else tooltiptext := TipPinText;
     end;
 
     if FHotSelectedByMouse
@@ -1506,28 +1626,20 @@ begin
       if vi.Pinnable
          and PinSelected
       then pt := Point(vi.Rect.Right - PinButtonWidth, vi.Rect.Bottom)
-      else pt := Point(vi.Rect.Left + ItemPadding + FIconSize, vi.Rect.Bottom);
+      else pt := Point(vi.Rect.Left + ItemPadding.cx + FIconSize, vi.Rect.Bottom);
       MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
     end;
 
-		SendMessage(TipHwnd, TTM_UPDATETIPTEXT, 0, LParam(@TipToolInfo));
-		SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, MakeLParam(pt.X, pt.Y));
-		SendMessage(TipHwnd, TTM_TRACKACTIVATE, WParam(True), LParam(@TipToolInfo));
-
-    GetWindowRect(TipHwnd, tr);
-    npt := FitTipRect(tr, TipMonitorRect);
-    if (npt <> pt)
-    then SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, MakeLParam(npt.X, npt.Y));
+    ToolTip.Activate(pt, tooltiptext, taLeftJustify, taAlignBottom);
 
     SetTimer(Handle, TIMER_TOOLTIP_HIDE, TipHideTime, nil);
-
     Exit;
   end;
 
   if (Message.WParam = TIMER_TOOLTIP_HIDE)
   then begin
-    SendMessage(TipHwnd, TTM_TRACKACTIVATE, WParam(False), LParam(@TipToolInfo));
     KillTimer(Handle, TIMER_TOOLTIP_HIDE);
+    ToolTip.Cancel;
     Exit;
   end;
 end;
@@ -1570,8 +1682,8 @@ begin
       vi.Style := vtGroup;
       vi.Group := g;
       if vr.IsEmpty
-      then vr := Bounds(ItemMargin, ItemSpacing, ItemWidth, ItemHeight)
-      else vr.Offset(0, ItemHeight + ItemSpacing);
+      then vr := Bounds(ItemMargin.cx, ItemSpacing, ItemWidth, ItemHeight)
+      else vr.Offset(0, vr.Height + ItemSpacing); //vr.Offset(0, ItemHeight + ItemSpacing);
       vi.Rect := vr;
       FVtList.Add(vi);
 
@@ -1584,7 +1696,8 @@ begin
         if ji.eType = jiSeparator
         then begin
           vi.Style := vtSeparator;
-          vr.Offset(0, ItemHeight + ItemSpacing);
+          vr.Offset(0, vr.Height + ItemSpacing); //vr.Offset(0, ItemHeight + ItemSpacing);
+          vr.Height := SeparatorHeight;
           vi.Rect := vr;
           FVtList.Add(vi);
           Continue;
@@ -1594,7 +1707,8 @@ begin
         vi.Group := g;
         vi.Item := i;
         vi.Icon := ExtractIcon(ji.Item, ji.eType);
-        vr.Offset(0, ItemHeight + ItemSpacing);
+        vr.Offset(0, vr.Height + ItemSpacing); //vr.Offset(0, ItemHeight + ItemSpacing);
+        vr.Height := ItemHeight;
         vi.Rect := vr;
         vi.IsLatesPinned := (LastPinUnpinHash = ji.Hash);
         vi.Pinnable := jg.eType <> jgTasks;
@@ -1605,14 +1719,14 @@ begin
     { Add footer items }
     if (FVtList.Count > 0)
     then begin
-      RectBody := Bounds(0, 0, ListWidth, vr.Bottom + ItemMargin);
+      RectBody := Bounds(0, 0, ListWidth, vr.Bottom + ItemMargin.cy);
       RectFooter := Bounds(0, RectBody.Bottom, ListWidth,
-        ItemSpacing + ItemMargin
+        ItemSpacing + ItemMargin.cy
         + 1*ItemHeight + 0*ItemSpacing
-        + ItemMargin{ + 1});
+        + ItemMargin.cy{ + 1});
 
       { Add parent shortcut item }
-      vr.Location := Point(ItemMargin, RectFooter.Top + ItemSpacing + ItemMargin{ + 1});
+      vr.Location := Point(ItemMargin.cx, RectFooter.Top + ItemSpacing + ItemMargin.cy{ + 1});
       FillChar(vi, SizeOf(vi), 0);
       vi.Style := vtFooter;
       vi.Rect := vr;
@@ -1646,8 +1760,8 @@ begin
 
     PrepareTooltips;
 
-    AdjustWindowRectEx(r, DWORD(GetWindowLong(Handle, GWL_STYLE)), False,
-      DWORD(GetWindowLong(Handle, GWL_EXSTYLE)));
+    if not IsWindows10
+    then AdjustWindowRectEx(r, DWORD(GetWindowLong(Handle, GWL_STYLE)), False, DWORD(GetWindowLong(Handle, GWL_EXSTYLE)));
 
     L := 0;
     T := 0;
@@ -1655,24 +1769,40 @@ begin
     H := r.Height;
 
     case FAlign of
-      saLeft: begin
-        L := FX + FormOffset;
-        T := FY - H;
-      end;
-      saTop: begin
-        L := FX - (W div 2);
-        T := FY + FormOffset;
-      end;
-      saRight: begin
-        L := FX - W - FormOffset;
-        T := FY - H;
-      end;
-      saBottom: begin
-        L := FX - (W div 2);
-        T := FY - H - FormOffset;
-      end;
+      EPanelAlignLeft:
+        begin
+          L := FItemRect.Right + FormOffset;
+          //T := FItemRect.Bottom - H;
+          T := FItemRect.Top - 1;
+        end;
+      EPanelAlignTop:
+        begin
+          L := FItemRect.CenterPoint.X - (W div 2);
+          T := FItemRect.Bottom + FormOffset;
+        end;
+      EPanelAlignRight:
+        begin
+          L := FItemRect.Left - W - FormOffset;
+          //T := FItemRect.Bottom - H;
+          T := FItemRect.Top - 1;
+        end;
+      EPanelAlignBottom:
+        begin
+          L := FItemRect.CenterPoint.X - (W div 2);
+          T := FItemRect.Top - H - FormOffset;
+        end;
     end;
-    monrect := Screen.MonitorFromPoint( Point(FX, FY) ).BoundsRect;
+
+    if IsWindows10
+    then begin
+      GlassFrame.Left    := IfThen(FAlign = EPanelAlignLeft,   0, 1);
+      GlassFrame.Top     := IfThen(FAlign = EPanelAlignTop,    0, 1);
+      GlassFrame.Right   := IfThen(FAlign = EPanelAlignRight,  0, 1);
+      GlassFrame.Bottom  := IfThen(FAlign = EPanelAlignBottom, 0, 1);
+      GlassFrame.Enabled := True;
+    end;
+
+    monrect := Screen.MonitorFromPoint(FItemRect.CenterPoint).BoundsRect;
     // correct lefttop
     if (L + W) > (monrect.Right)
     then L := monrect.Right - W;
@@ -1681,7 +1811,6 @@ begin
     if (T + H) > (monrect.Bottom)
     then T := monrect.Bottom - H;
     T := Max(T, monrect.Top);
-    SelfBoundsRect := Bounds(L, T, W, H);
 
     PaintForm(oBgBmp.Dc);
 
@@ -1697,6 +1826,7 @@ begin
       // show
       SetWindowPos(Handle, 0, L, T, W, H, SWP_SHOWWINDOW);
     end;
+
     Invalidate;
 
     Exit(True);
@@ -1721,7 +1851,7 @@ begin
   if (FHotIndex = AValue)
   then Exit;
 
-  SendMessage(TipHwnd, TTM_TRACKACTIVATE, WParam(False), LParam(@TipToolInfo));
+  ToolTip.Cancel;
 
   dc := oBgBmp.Dc;
 
@@ -1740,15 +1870,12 @@ begin
   PaintForm(dc);
 end;
 
-function TFormJumpList.Popup(AWnd: HWND; APt: TPoint; AAlign: TScreenAlign): Boolean;
+function TFormJumpList.Popup(AWnd: HWND; AItemRect: TRect; AAlign: TPanelAlign): Boolean;
 begin
   FWnd := AWnd;
-  FX := APt.X;
-  FY := APt.Y;
+  FItemRect := AItemRect;
   FAlign := AAlign;
   Result := UpdateJumpList(False);
-  // Get current monitor rect
-  TipMonitorRect := Screen.MonitorFromPoint(APt).BoundsRect;
 end;
 
 procedure TFormJumpList.OnJumpListPin(Sender: TObject);

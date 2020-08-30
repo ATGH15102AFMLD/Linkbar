@@ -73,18 +73,21 @@ type
   function CalcFNVHash(const AData; ALength: integer; AHash: Cardinal = FNV_HASH0): Cardinal; overload;
   // Calculate FNV hash for a string
   function CalcFNVHash(const AData: PChar; AHash: Cardinal = FNV_HASH0): Cardinal; overload;
+  //
+  procedure CreateLinkbarTasksJumplist;
 
 implementation
 
 uses
   System.SysUtils, System.Win.ComObj, Winapi.ActiveX, Winapi.ObjectArray,
-  Winapi.ShellAPI, Winapi.PropKey, Winapi.PropSys, Linkbar.OS, Linkbar.L10n;
+  Winapi.ShellAPI, Winapi.PropKey, Winapi.PropSys, Vcl.Consts,
+  Linkbar.OS, Linkbar.L10n, Linkbar.Consts, Linkbar.Shell;
 
 const
   { Jumplist list type }
   JL_LT_PINNED   = 0;
-  JL_LT_RECENT   = 1;
-  JL_LT_FREQUENT = 2;
+  JL_LT_FREQUENT = 1;
+  JL_LT_RECENT   = 2;
   { Jumplist category type }
   JL_CT_CUSTOM   = 0;
   JL_CT_NORMAL   = 1;
@@ -135,7 +138,7 @@ type
     function GetCategoryCount(var pCount: UINT): HRESULT; stdcall;
     function GetCategory(index: UINT; getCatFlags: Integer; var pCategory: TAppDestCategory): HRESULT; stdcall;
     function DeleteCategory(): HRESULT; stdcall;
-    function EnumerateCategoryDestinations(index: UINT; const riid: {REFIID}TIID; var ppvObjectT: Pointer): HRESULT; stdcall;
+    function EnumerateCategoryDestinations(index: UINT; const riid: TIID; var ppvObjectT: Pointer): HRESULT; stdcall;
     function RemoveDestination(pItem: IUnknown): HRESULT; stdcall;
     function ResolveDestination(): HRESULT; stdcall;
   end;
@@ -143,7 +146,7 @@ type
   IAutomaticDestinationList = interface(IUnknown)
     function Initialize(appUserModelId: LPCWSTR; lnkPath: LPCWSTR; u: LPCWSTR): HRESULT; stdcall;
     function HasList(var pHasList: BOOL): HRESULT; stdcall;
-    function GetList(listType: Integer; maxCount: Integer{Cardinal}; const riid: {REFIID}TIID; var ppvObject: Pointer): HRESULT; stdcall;
+    function GetList(listType: Integer; maxCount: UINT; const riid: TIID; var ppvObject: Pointer): HRESULT; stdcall;
     function AddUsagePoint(): HRESULT; stdcall;
     function PinItem(pItem: IUnknown; pinIndex: Integer): HRESULT; stdcall; // -1 - pin, -2 - unpin
     function IsPinned(): HRESULT; stdcall;
@@ -158,7 +161,7 @@ type
   IAutomaticDestinationList10b = interface(IUnknown)
     function Initialize(appUserModelId: LPCWSTR; lnkPath: LPCWSTR; u: LPCWSTR): HRESULT; stdcall;
     function HasList(var pHasList: BOOL): HRESULT; stdcall;
-    function GetList(listType: Integer; maxCount: Cardinal; flags: Cardinal; const riid: {REFIID}TIID; var ppvObject: Pointer): HRESULT; stdcall;
+    function GetList(listType: Integer; maxCount: Cardinal; flags: Cardinal; const riid: TIID; var ppvObject: Pointer): HRESULT; stdcall;
     function AddUsagePoint(): HRESULT; stdcall;
     function PinItem(pItem: IUnknown; pinIndex: Integer): HRESULT; stdcall; // -1 - pin, -2 - unpin
     function IsPinned(): HRESULT; stdcall;
@@ -182,7 +185,9 @@ type
   end;
 
   TShellItemList = TList<IShellItem>;
-  TcardinalList = TList<Cardinal>;
+  TCardinalList = TList<Cardinal>;
+
+  EJumpListItemException = class(Exception);
 
 // In Delphi XE3 the following functions are not defined
 
@@ -268,19 +273,19 @@ end;
 
 procedure TAutomaticList.PinItem(pItem: IUnknown; pinIndex: Integer);
 begin
-	if Assigned(m_pAutoList)
+  if Assigned(m_pAutoList)
   then m_pAutoList.PinItem(pItem, pinIndex)
-	else if Assigned(m_pAutoList10b)
+  else if Assigned(m_pAutoList10b)
   then m_pAutoList10b.PinItem(pItem, pinIndex);
 end;
 
 function TAutomaticList.RemoveDestination(pItem: IUnknown): Boolean;
 begin
   Result := False;
-	if Assigned(m_pAutoList)
+  if Assigned(m_pAutoList)
   then Result := Succeeded(m_pAutoList.RemoveDestination(pItem))
-	else if Assigned(m_pAutoList10b)
-	then Result := Succeeded(m_pAutoList10b.RemoveDestination(pItem));
+  else if Assigned(m_pAutoList10b)
+  then Result := Succeeded(m_pAutoList10b.RemoveDestination(pItem));
 end;
 
 { TJumpGroup }
@@ -345,7 +350,6 @@ function HasJumplist(const AAppId: PChar): Boolean;
 var pCustomList: IDestinationList;
     count: UINT;
     autoList: TAutomaticList;
-    //
     hr: HRESULT;
 begin
   pCustomList := GetCustomList(AAppId);
@@ -367,14 +371,14 @@ var val: TPropVariant;
 begin
   Result := '';
   PropVariantInit(val);
-	if Succeeded(AStore.GetValue(AKey, val))
-	then begin
-		if val.vt in [VT_LPWSTR, VT_BSTR]
+  if Succeeded(AStore.GetValue(AKey, val))
+  then begin
+    if val.vt in [VT_LPWSTR, VT_BSTR]
     then Result := val.pwszVal
       else if (val.vt = VT_LPSTR)
-		  then Result := String(val.pszVal);
-	end;
-	PropVariantClear(val);
+      then Result := string(val.pszVal);
+  end;
+  PropVariantClear(val);
 end;
 
 // FNV hash algorithm as described here: http://www.isthe.com/chongo/tech/comp/fnv/index.html
@@ -426,7 +430,7 @@ begin
   Result := hash;
 end;
 
-procedure AddJumpItem(const AGroup: TJumpGroup; const AUnknown: IUnknown; const AIgnoreItems: TShellItemList; const AIgnoreLinks: TcardinalList);
+procedure AddJumpItem(const AGroup: TJumpGroup; const AUnknown: IUnknown; const AIgnoreItems: TShellItemList; const AIgnoreLinks: TCardinalList);
 var item: TJumpItem;
     pItem: IShellItem;
     pLink: IShellLink;
@@ -494,6 +498,7 @@ begin
          and (val.boolVal)
       then begin
         item.eType := jiSeparator;
+        item.Name := '-';
         PropVariantClear(val);
       end
       else begin
@@ -543,7 +548,7 @@ begin
 end;
 
 procedure AddJumpCollection(const AGroup: TJumpGroup; const ACollection: IObjectCollection;
-  const AIgnoreItems: TShellItemList; const AIgnoreLinks: TcardinalList);
+  const AIgnoreItems: TShellItemList; const AIgnoreLinks: TCardinalList);
 var count: UINT;
     i: Integer;
     pUnknown: IUnknown;
@@ -656,7 +661,7 @@ begin
           then begin
             group := TJumpGroup.Create;
             AList.Groups.Add(group);
-            if (category.union.subType = 1)
+            if (category.union.subType = JL_LT_FREQUENT)
             then begin
               group.eType := jgFrequent;
               group.Name := L10NFind('Jumplist.Frequent', 'Frequent');
@@ -689,7 +694,7 @@ begin
     AddJumpCollection(group, pCollection, ignoreItems, ignoreLinks);
   end;
 
-	if (categoryCount = 0)
+  if (categoryCount = 0)
      and (AMaxCount > 0)
   then begin
     // Add Recent
@@ -920,6 +925,89 @@ begin
   StrPLCopy(AAppId, pwc, MAX_PATH);
   CoTaskMemFree(pwc);
   Result := True;
+end;
+
+{ Create Linkbar jumplist with tasks "New", "Close all" }
+
+procedure CheckError(ErrNo: HRESULT; const Description: string);
+begin
+  if not Succeeded(ErrNo)
+  then raise EJumpListItemException.CreateFmt(SJumplistsItemException, [ErrNo, Description]);
+end;
+
+function CreateIShellLink(const AFriendlyName, AArguments, APath, AIcon: string): IShellLink;
+var
+  LPropertyStore: Winapi.PropSys.IPropertyStore;
+  LPropVariant: TPropVariant;
+begin
+  Result := CreateComObject(CLSID_ShellLink) as IShellLink;
+
+  if (AFriendlyName <> '')
+  then begin
+    CheckError(Result.QueryInterface(Winapi.PropSys.IPropertyStore, LPropertyStore), SJumplistsItemErrorGetpsi);
+    CheckError(InitPropVariantFromString(PWideChar(AFriendlyName), LPropVariant), SJumplistsItemErrorInitializepropvar);
+    CheckError(LPropertyStore.SetValue(PKEY_Title, LPropVariant), SJumplistsItemErrorSetps);
+    CheckError(LPropertyStore.Commit(), SJumplistsItemErrorCommitps);
+    PropVariantClear(LPropVariant);
+  end
+  else
+    raise EJumpListItemException.Create(SJumplistsItemErrorNofriendlyname);
+
+  if (AArguments <> '')
+  then CheckError(Result.SetArguments(PWideChar(AArguments)), SJumplistsItemErrorSettingarguments);
+
+  if (APath <> '')
+  then CheckError(Result.SetPath(PWideChar(APath)), SJumplistsItemErrorSettingpath)
+  else CheckError(Result.SetPath(PWideChar(ParamStr(0))), SJumplistsItemErrorSettingpath);
+
+  if (AIcon <> '')
+  then CheckError(Result.SetIconLocation(PWideChar(AIcon), 0), SJumplistsItemErrorSettingicon)
+  else CheckError(Result.SetIconLocation(PWideChar(Paramstr(0)), 0), SJumplistsItemErrorSettingicon);
+end;
+
+procedure CreateLinkbarTasksJumplist;
+var
+  destinationList: ICustomDestinationList;
+  maxSlots, objects: Cardinal;
+  removedTasks, tasksList: IObjectArray;
+  objCollection: IObjectCollection;
+  shellLink: IShellLink;
+  friendlyName: string;
+begin
+  if (not IsJumplistAvailable)
+  then Exit;
+
+  destinationList := CreateComObject(CLSID_DestinationList) as ICustomDestinationList;
+  if (destinationList <> nil)
+  then begin
+    //SetCurrentProcessExplicitAppUserModelID(PWideChar(APP_ID_LINKBAR));
+
+    destinationList.BeginList(maxSlots, IID_IObjectArray, removedTasks);
+    try
+      if Succeeded(CoCreateInstance(CLSID_EnumerableObjectCollection, nil, CLSCTX_INPROC_SERVER, IID_IObjectCollection, objCollection))
+      then begin
+        friendlyName := L10NFind('Jumplist.NewLinkbar', 'New linkbar');
+        shellLink := CreateIShellLink(friendlyName, LBCreateCommandParam(CLK_NEW), '', '');
+        objCollection.AddObject(shellLink);
+
+        friendlyName := L10NFind('Menu.CloseAll', 'Close all');
+        shellLink := CreateIShellLink(friendlyName, LBCreateCommandParam(CLK_CLOSEALL), '', '');
+        objCollection.AddObject(shellLink);
+
+        objCollection.QueryInterface(IObjectArray, tasksList);
+      end;
+
+      if (tasksList <> nil)
+         and (tasksList.GetCount(objects) = S_OK)
+         and (objects > 0)
+      then destinationList.AddUserTasks(tasksList);
+
+      destinationList.CommitList;
+    except
+      destinationList.AbortList;
+      //raise;
+    end;
+  end;
 end;
 
 end.

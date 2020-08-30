@@ -5,6 +5,8 @@
 
 unit HotKey;
 
+{$i linkbar.inc}
+
 interface
 
 uses
@@ -16,15 +18,16 @@ const
 
 type
   THotkeyInfo = record
-  private
-    const SSHIFT = 'Shift';
-          SCTRL  = 'Ctrl';
-          SALT   = 'Alt';
-          SWIN   = 'Win';
-          SNONE  = 'None';
+  private const
+    SHIFT = 'Shift';
+    CTRL  = 'Ctrl';
+    ALT   = 'Alt';
+    WIN   = 'Win';
+    NONE  = 'None';
   public
     Modifiers: Word;                                                            // Winapi.Windows.MOD_...
     KeyCode: Word;                                                              // Virtual Key Code
+    class operator Equal(const Lhs, Rhs: THotkeyInfo): Boolean;
     class operator NotEqual(const Lhs, Rhs: THotkeyInfo): Boolean;
     class operator Implicit(const A: THotkeyInfo): string;
     class operator Implicit(const A: THotkeyInfo): Integer;
@@ -105,16 +108,21 @@ begin
   Result := (Lhs.KeyCode <> Rhs.KeyCode) or (Lhs.Modifiers <> Rhs.Modifiers);
 end;
 
+class operator THotkeyInfo.Equal(const Lhs, Rhs: THotkeyInfo): Boolean;
+begin
+  Result := not (Lhs <> Rhs);
+end;
+
 function THotkeyInfo.ToUserString: string;
 begin
   Result := ShortCutToText(KeyCode);
   if Result = ''
   then Result := 'None';
 
-  if (Modifiers and MOD_WIN     > 0) then Result := SWIN   + '+' + Result;
-  if (Modifiers and MOD_ALT     > 0) then Result := SALT   + '+' + Result;
-  if (Modifiers and MOD_CONTROL > 0) then Result := SCTRL  + '+' + Result;
-  if (Modifiers and MOD_SHIFT   > 0) then Result := SSHIFT + '+' + Result;
+  if (Modifiers and MOD_WIN     <> 0) then Result := THotkeyInfo.WIN   + '+' + Result;
+  if (Modifiers and MOD_ALT     <> 0) then Result := THotkeyInfo.ALT   + '+' + Result;
+  if (Modifiers and MOD_CONTROL <> 0) then Result := THotkeyInfo.CTRL  + '+' + Result;
+  if (Modifiers and MOD_SHIFT   <> 0) then Result := THotkeyInfo.SHIFT + '+' + Result;
 end;
 
 { THotKeyEdit }

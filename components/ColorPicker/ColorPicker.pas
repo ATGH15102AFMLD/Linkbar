@@ -5,13 +5,15 @@
 
 unit ColorPicker;
 
+{$i linkbar.inc}
+
 interface
 
 {$R-}
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, ExtCtrls, ImgList, StdCtrls, Math, Buttons;
+  Dialogs, ExtCtrls, ImgList, StdCtrls, Math, Buttons, System.ImageList;
 
 type
   TRGB = packed record
@@ -247,8 +249,8 @@ end;
 procedure TfrmColorPicker.L10n;
 begin
   L10nControl(Self, 'Color.Caption');
-  L10nControl(btnOk, 'Color.OK');
-  L10nControl(btnCancel, 'Color.Cancel');
+  L10nControl(btnOk, 'Button.OK');
+  L10nControl(btnCancel, 'Button.Cancel');
 end;
 
 procedure TfrmColorPicker.FormCreate(Sender: TObject);
@@ -479,7 +481,7 @@ begin
         Row[x].g := Byte(s2 * q2 shr 8 + m1);
         Row[x].b := Byte(s2 * q3 shr 8 + m1);
       end;
-      slPtr := slPtr + slSize;
+      slPtr := slPtr + UIntPtr(slSize);
     end;
     LUT := nil;
   end;
@@ -548,7 +550,7 @@ begin
       else
         Row[x] := c2;
     end;
-    Row := PRGBArray(UIntPtr(Row) + RowOff);
+    Row := PRGBArray(UIntPtr(Row) + UIntPtr(RowOff));
   end;
 
   imgColor.Canvas.StretchDraw(Rect(0, 0, imgColor.Width, imgColor.Height), ColorBmp);
@@ -589,7 +591,7 @@ begin
       else
         Row[x] := c2;
     end;
-    Row := PRGBArray(UIntPtr(Row) + RowOff);
+    Row := PRGBArray(UIntPtr(Row) + UIntPtr(RowOff));
   end;
 
   imgAlpha.Canvas.StretchDraw(Rect(0, 0, imgAlpha.Width, imgAlpha.Height), ABarBmp);
@@ -616,7 +618,7 @@ begin
   bmp.PixelFormat := pf32bit;
   bmp.SetSize(w, w);
 
-  drawer := bmp.ToGPGraphics;
+  drawer := TGPGraphics.Create(bmp.Canvas.Handle);
   drawer.SmoothingMode := SmoothingModeAntiAlias;
   drawer.Clear(0);
 

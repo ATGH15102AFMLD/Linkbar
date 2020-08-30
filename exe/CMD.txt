@@ -5,7 +5,10 @@ Set startup delay
 -l[param] 
 Set UI language
 [param] = 1033 or en-US (English)
+          1046 or pt-BR (Brazilian)
           1036 or fr-FR (French)
+          1057 or id-ID (Indonesian)
+          1040 or it-IT (Italian)
           1031 or de-DE (German)
           1032 or el-GR (Greek)
           1041 or ja-JP (Japanese)
@@ -21,3 +24,6 @@ Set path to configuration file
 
 -n
 Open "New Linkbar" dialog
+
+-ca
+Close all open panels

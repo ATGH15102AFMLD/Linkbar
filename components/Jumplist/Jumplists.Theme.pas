@@ -3,14 +3,14 @@
 {            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
-unit Jumplists.Themes;
+unit Jumplists.Theme;
 
 {$i linkbar.inc}
 
 interface
 
 uses
-  Winapi.Windows;
+  GdiPlus, Winapi.Windows, Linkbar.Consts;
 
 const
   { Linkbar Jumplist PartId }
@@ -37,10 +37,15 @@ const
   procedure ThemeJlDeinit;
   procedure ThemeJlDrawBackground(const AHdc: HDC; const APart: Integer; const AFullRect, AClipRect: TRect);
   procedure ThemeJlDrawButton(const AHdc: HDC; const APart, AState: Integer; const ABtnRect: TRect);
+  procedure ThemeJlDrawSeparator(const AHdc: HDC; const ARect: TRect);
+  procedure ThemeJlUpdate;
+
+var
+  W10_JLIC_Text_Header: Cardinal;
 
 implementation
 
-uses Vcl.Themes, Winapi.UxTheme, Linkbar.OS;
+uses Vcl.Themes, Winapi.UxTheme, Linkbar.OS, Linkbar.Theme, Math;
 
 const
   { OS type }
@@ -92,7 +97,7 @@ const
   JL_HTHEME_SID: array[0..LB_JLS_COUNT-1] of Integer =
     ({-1, }JLS_NORMAL, JLS_PRESSED, JLS_SELECTED, JLS_NEW);
 
-  { Jumplist colors for Windows 10 }
+  { Jumplist colors for Windows 10
   // Style 1
   JLIC_W10_NORMAL   : Cardinal = $1b1b1b;//$2b2b2b;
   JLIC_W10_HOT      : Cardinal = $404040;
@@ -109,26 +114,94 @@ const
 var
   hJlTheme: HTHEME;
   osIndex: Integer;
+  // Windows 10 colors
+  W10_JLIC_Body: Cardinal;
+  W10_JLIC_Footer: Cardinal;
+  W10_JLIC_Item_Selected: Cardinal;
+  W10_JLIC_Item_Hot: Cardinal;
+  W10_JLIC_Separator: Cardinal;
+
+// Accent, Dark
+// hot      $19ffffff - white w/ alpha 10% - 22.5           ?ImmersiveDarkListLow
+// selected $30ffffff - white w/ alpha 19% - 48.45          ?ImmersiveDarkListMedium
+//
+// Light
+// hot      $99ffffff - white w/ alpha 60% - 153
+// selected $d4ffffff - white w/ alpha 83% - 211.65
+
+
+function BlendBW(Color1: Cardinal; Color2: Byte; Alpha: Single): Cardinal;
+var R, G, B, C: Single;
+begin
+  B := (($000000FF and Color1)       ) / 255.0;
+  G := (($0000FF00 and Color1) Shr 8 ) / 255.0;
+  R := (($00FF0000 and Color1) Shr 16) / 255.0;
+  C := Color2 / 255.0;
+
+  R := Min(R * (1.0 - Alpha) + C * Alpha, 1.0) * 255.0;
+  G := Min(G * (1.0 - Alpha) + C * Alpha, 1.0) * 255.0;
+  B := Min(B * (1.0 - Alpha) + C * Alpha, 1.0) * 255.0;
+
+  Result := Trunc(R) + (Trunc(G) shl 8) + (Trunc(B) shl 16);
+end;
+
+procedure ThemeJlUpdate;
+begin
+  if not IsWindows10
+  then Exit;
+
+  case GlobalLook of
+    ELookLight:
+      begin
+        W10_JLIC_Body          := $ffD5D5D5;
+        W10_JLIC_Footer        := $ffE4E4E4;
+        W10_JLIC_Item_Selected := $d4ffffff;
+        W10_JLIC_Item_Hot      := $99ffffff;
+        W10_JLIC_Separator     := (Trunc(255 * 0.40) shl 24) or $000000;
+      end;
+    ELookDark:
+      begin
+        W10_JLIC_Body          := SwapRedBlue(GetImmersiveColorFromName('ImmersiveDarkChromeMedium'));
+        W10_JLIC_Footer        := SwapRedBlue(GetImmersiveColorFromName('ImmersiveDarkChromeTaskbarBase'));
+        W10_JLIC_Item_Selected := $30ffffff;
+        W10_JLIC_Item_Hot      := $19ffffff;
+        W10_JLIC_Separator     := (Trunc(255 * 0.40) shl 24) or $ffffff;
+      end;
+    ELookAccent:
+      begin
+        W10_JLIC_Body          := SwapRedBlue(GetImmersiveColorFromName('ImmersiveSystemAccentDark1'));
+        W10_JLIC_Footer        := SwapRedBlue(GetImmersiveColorFromName('ImmersiveSystemAccentDark2'));
+        W10_JLIC_Item_Selected := $30ffffff;
+        W10_JLIC_Item_Hot      := $19ffffff;
+        W10_JLIC_Separator     := (Trunc(255 * 0.40) shl 24) or $ffffff;
+      end;
+    ELookCustom:
+      begin
+      end;
+  end;
+
+  // Calc header text color
+  // Dark, Accent: Body + (White w/ 60% alpha)
+  // Light       : Body + (Black w/ 60% alpha)
+  W10_JLIC_Text_Header := BlendBW(W10_JLIC_Body, IfThen(GlobalLook = ELookLight, $00, $ff), 0.6);
+end;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Draw background
 ////////////////////////////////////////////////////////////////////////////////
 
 { Style 1 }
-procedure Win10_DrawJlBackground(const AHdc: HDC; const APart: Integer;
-  const AFullRect, AClipRect: TRect);
+procedure Win10_DrawJlBackground(const AHdc: HDC; const APart: Integer; const AFullRect, AClipRect: TRect);
 var color: COLORREF;
-    brh0: HBRUSH;
+    gpDrawer: IGPGraphics;
 begin
   if (APart = LB_JLP_BODY)
-  then color := JLIC_W10_NORMAL
-  else color := JLIC_W10_HOT;
+  then color := W10_JLIC_Body
+  else color := W10_JLIC_Footer;
 
-  brh0 := SelectObject(AHdc, GetStockObject(DC_BRUSH));
-  SetDCBrushColor(AHdc, color);
-  FillRect(AHdc, AClipRect, GetStockObject(DC_BRUSH));
-  SelectObject(AHdc, brh0);
-end; {}
+  gpDrawer := TGPGraphics.Create(AHdc);
+  gpDrawer.FillRectangle(TGPSolidBrush.Create(color), TGPRect.Create(AClipRect));
+end;
 
 {$REGION ' Win10_DrawJlBackground #2 '}
 { Style 2
@@ -146,8 +219,7 @@ begin
 end; {}
 {$ENDREGION}
 
-procedure Win78_DrawJlBackground(const AHdc: HDC; const APart: Integer;
-  const AFullRect, AClipRect: TRect);
+procedure Win78_DrawJlBackground(const AHdc: HDC; const APart: Integer; const AFullRect, AClipRect: TRect);
 var cr: TRect;
 begin
   if (StyleServices.Enabled)
@@ -167,8 +239,7 @@ begin
   end;
 end;
 
-procedure ThemeJlDrawBackground(const AHdc: HDC; const APart: Integer;
-  const AFullRect, AClipRect: TRect);
+procedure ThemeJlDrawBackground(const AHdc: HDC; const APart: Integer; const AFullRect, AClipRect: TRect);
 begin
   if (IsWindows10)
   then Win10_DrawJlBackground(AHdc, APart, AFullRect, AClipRect)
@@ -179,87 +250,36 @@ end;
 // Draw button
 ////////////////////////////////////////////////////////////////////////////////
 
-{ Style 1 }
-procedure Win10_DrawJlButton(const AHdc: HDC; const APart, AState: Integer;
-  const ABtnRect: TRect);
-var color: COLORREF;
-    brh0: HBRUSH;
+procedure Win10_DrawJlButton(const AHdc: HDC; const APart, AState: Integer; const ABtnRect: TRect);
+var
+  color: Cardinal;
+  gpDrawer: IGPGraphics;
 begin
   case APart of
-    LB_JLP_BUTTON, LB_JLP_BUTTON_LEFT:
+    LB_JLP_BUTTON, LB_JLP_BUTTON_LEFT, LB_JLP_FOOTER_BUTTON:
       begin
         case AState of
-        //LB_JLS_NORMAL:   color := JLIC_W10_NORMAL;
-          LB_JLS_HOT:      color := JLIC_W10_HOT;
-          LB_JLS_SELECTED: color := JLIC_W10_HOT;
-          LB_JLS_NEW:      color := JLIC_W10_NEW;
+          LB_JLS_HOT, LB_JLS_SELECTED: color:= W10_JLIC_Item_Hot;
           else Exit;
         end;
       end;
-    LB_JLP_PIN_BUTTON, LB_JLP_FOOTER_BUTTON:
+    LB_JLP_PIN_BUTTON:
       begin
         case AState of
-        //LB_JLS_NORMAL:   color := JLIC_W10_NORMAL;
-          LB_JLS_HOT:      color := JLIC_W10_HOT;
-          LB_JLS_SELECTED: color := JLIC_W10_SELECTED;
+          LB_JLS_HOT:      color := W10_JLIC_Item_Hot;
+          LB_JLS_SELECTED: color := W10_JLIC_Item_Selected;
           else Exit;
         end;
       end;
     else Exit;
   end;
 
-  brh0 := SelectObject(AHdc, GetStockObject(DC_BRUSH));
-  SetDCBrushColor(AHdc, color);
-  FillRect(AHdc, ABtnRect, GetStockObject(DC_BRUSH));
-  SelectObject(AHdc, brh0);
-end; {}
+  gpDrawer := TGPGraphics.Create(AHdc);
+  //gpDrawer.SetClip( TGPRect.Create(ABtnRect) );
+  gpDrawer.FillRectangle(TGPSolidBrush.Create(color), TGPRect.Create(ABtnRect));
+end;
 
-{$REGION ' Win10_DrawJlButton #2 '}
-{ Style 2
-procedure Win10_DrawJlButton(const AHdc: HDC; const APart, AState: Integer;
-  const ABtnRect: TRect);
-var color: COLORREF;
-    brush: HBRUSH;
-begin
-  case APart of
-    LBJL_ITPID_BTN, LBJL_ITPID_BTN_LFT:
-      begin
-        case AState of
-          LBJL_ITSID_NORMAL:   color := JLIC_W10_BODY;
-          LBJL_ITSID_HOT:      color := JLIC_W10_BTN_HOT;
-          LBJL_ITSID_SELECTED: color := JLIC_W10_BTN_HOT;
-          LBJL_ITSID_NEW:      color := JLIC_W10_NEW;
-          else Exit;
-        end;
-      end;
-    LBJL_ITPID_FOOT:
-      begin
-        case AState of
-          LBJL_ITSID_NORMAL:   color := JLIC_W10_FOOTER;
-          LBJL_ITSID_SELECTED: color := JLIC_W10_FOT_HOT;
-          else Exit;
-        end;
-      end;
-    LBJL_ITPID_PIN:
-      begin
-        case AState of
-          LBJL_ITSID_NORMAL:   color := JLIC_W10_BODY;
-          LBJL_ITSID_HOT:      color := JLIC_W10_BTN_HOT;
-          LBJL_ITSID_SELECTED: color := JLIC_W10_PIN_HOT;
-          else Exit;
-        end;
-      end;
-    else Exit;
-  end;
-
-  brush := CreateSolidBrush(color);
-  FillRect(AHdc, ABtnRect, brush);
-  DeleteObject(brush);
-end; {}
-{$ENDREGION}
-
-procedure Win78_DrawJlButton(const AHdc: HDC; const APart, AState: Integer;
-  const ABtnRect: TRect);
+procedure Win78_DrawJlButton(const AHdc: HDC; const APart, AState: Integer; const ABtnRect: TRect);
 var part, state: Integer;
     pen0: HPEN;
     brh0: HBRUSH;
@@ -308,12 +328,34 @@ begin
   end;
 end;
 
-procedure ThemeJlDrawButton(const AHdc: HDC; const APart, AState: Integer;
-  const ABtnRect: TRect);
+procedure ThemeJlDrawButton(const AHdc: HDC; const APart, AState: Integer; const ABtnRect: TRect);
 begin
   if (IsWindows10)
   then Win10_DrawJlButton(AHdc, APart, AState, ABtnRect)
   else Win78_DrawJlButton(AHdc, APart, AState, ABtnRect);
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+// Draw separator
+////////////////////////////////////////////////////////////////////////////////
+
+procedure Win10_DrawJlSeparator(const AHdc: HDC; const ARect: TRect);
+var gpDrawer: IGPGraphics;
+begin
+  gpDrawer := TGPGraphics.Create(AHdc);
+  gpDrawer.FillRectangle(TGPSolidBrush.Create(W10_JLIC_Separator), TGPRect.Create(ARect));
+end;
+
+procedure Win78_DrawJlSeparator(const AHdc: HDC; const ARect: TRect);
+begin
+  // Draw in place
+end;
+
+procedure ThemeJlDrawSeparator(const AHdc: HDC; const ARect: TRect);
+begin
+  if (IsWindows10)
+  then Win10_DrawJlSeparator(AHdc, ARect)
+  else Win78_DrawJlSeparator(AHdc, ARect);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -66,7 +66,7 @@ begin
 end;
 
 procedure TRenamingWCl.FormCreate(Sender: TObject);
-var cue: String;
+var cue: string;
 begin
   Font.Name := Screen.IconFont.Name;
 
@@ -88,8 +88,8 @@ end;
 procedure TRenamingWCl.L10n;
 begin
   L10nControl(Self,      'Rename.Caption');
-  L10nControl(btnOk,     'Rename.OK');
-  L10nControl(btnCancel, 'Rename.Cancel');
+  L10nControl(btnOk,     'Button.OK');
+  L10nControl(btnCancel, 'Button.Cancel');
 end;
 
 procedure TRenamingWCl.SetPidl(APidl: PItemIDList);
@@ -98,7 +98,7 @@ begin
   FPidl := APidl;
   if Succeeded(SHGetNameFromIDList(FPidl, SIGDN_NORMALDISPLAY, ppszName))
   then begin
-    edtFileName.Text := String(ppszName);
+    edtFileName.Text := string(ppszName);
     CoTaskMemFree(ppszName);
   end;
   edtFileName.SelectAll;
@@ -232,7 +232,7 @@ begin
   ShowBalloonTip(FInvalidFileNameCharsHintText);
 end; }
 
-procedure TRenamingWCl.ShowBalloonTip(const AText: String);
+procedure TRenamingWCl.ShowBalloonTip(const AText: string);
 var ebt: TEditBalloonTip;
 begin
   FillChar(ebt, SizeOf(ebt), 0);

@@ -61,6 +61,8 @@
 
 unit Cromis.DirectoryWatch;
 
+{$i linkbar.inc}
+
 interface
 
 uses

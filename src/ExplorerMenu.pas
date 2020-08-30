@@ -18,10 +18,11 @@ const
   LM_CM_ITEMS  = WM_USER + 11;
   LM_CM_RENAME = WM_USER + 12;
   LM_CM_INVOKE = WM_USER + 13;
+  LM_CM_DELETE = WM_USER + 14;
 
-  procedure ExplorerMenuPopup(const AWnd: HWND; const APidl: PItemIDList;
-    const AScrPt: TPoint; const AShift: Boolean; const ASubMenu: HMENU);
-  procedure OpenByDefaultVerb(const AWnd: HWND; const APidl: PItemIDList);
+  procedure ExplorerMenuPopup(AHandle: HWND; const APidl: PItemIDList; const APoint: TPoint;
+    AShift: Boolean; ASubMenu: HMENU);
+  procedure OpenByDefaultVerb(AHandle: HWND; const APidl: PItemIDList);
   function BitmapFromIcon(AIcon: HICON; ASize: integer): HBITMAP;
 
 implementation
@@ -31,103 +32,99 @@ const
   SCRATCH_QCM_LAST = FCIDM_SHVIEWLAST;
 
 var
-  g_cm2: IContextMenu2;
-  g_cm3: IContextMenu3;
+  pContextMenu2: IContextMenu2;
+  pContextMenu3: IContextMenu3;
 
 function MenuCallback(Wnd: HWND; Msg: UINT; WParam: WPARAM; LParam: LPARAM): LRESULT; stdcall;
 begin
-  if Assigned(g_cm3)
+  if Assigned(pContextMenu3)
   then begin
-    if Succeeded(g_cm3.HandleMenuMsg2(Msg, WParam, LParam, Result))
+    if Succeeded(pContextMenu3.HandleMenuMsg2(Msg, WParam, LParam, Result))
     then Exit;
   end
-  else if Assigned(g_cm2)
+  else if Assigned(pContextMenu2)
   then begin
-    if Succeeded(g_cm2.HandleMenuMsg(Msg, WParam, LParam))
-    then begin
-      Result := 0;
-      Exit;
-    end;
+    if Succeeded(pContextMenu2.HandleMenuMsg(Msg, WParam, LParam))
+    then Exit(0);
   end;
   Result := DefWindowProc(Wnd, Msg, wParam, lParam);
 end;
 
-function CreateMenuCallbackWnd: HWND;
-const
-  IcmCallbackWnd = 'ICMCALLBACKWND';
-var WndClass: TWndClass;
+function CreateMenuCallbackWindow: HWND;
 begin
-  FillChar(WndClass, SizeOf(WndClass), 0);
-  WndClass.lpszClassName := PChar(IcmCallbackWnd);
-  WndClass.lpfnWndProc := @MenuCallback;
-  WndClass.hInstance := HInstance;
-  Winapi.Windows.RegisterClass(WndClass);
-  Result := CreateWindow(IcmCallbackWnd, '', 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, nil);
+  var wndClass := Default(TWndClassEx);
+  wndClass.cbSize := SizeOf(TWndClassEx);
+  wndClass.lpszClassName := 'LINKBAR_CM_CALLBACK_WND';
+  wndClass.lpfnWndProc := @MenuCallback;
+  wndClass.hInstance := HInstance;
+  RegisterClassEx(wndClass);
+  Result := CreateWindow(wndClass.lpszClassName, '', 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, nil)
 end;
 
 // Converts an icon to a bitmap
 function BitmapFromIcon(AIcon: HICON; ASize: integer): HBITMAP;
-var bi: TBitmapInfo;
-    rc: TRect;
-    dc: HDC;
-    bits: Pointer;
-    bmp: HBITMAP;
-    bmp0: HGDIOBJ;
+var
+  bi: TBitmapInfo;
 begin
-	FillChar(bi, SizeOf(bi), 0);
-	bi.bmiHeader.biSize := SizeOf(TBitmapInfoHeader);
-	bi.bmiHeader.biWidth := ASize;
+  FillChar(bi, SizeOf(bi), 0);
+  bi.bmiHeader.biSize := SizeOf(TBitmapInfoHeader);
+  bi.bmiHeader.biWidth := ASize;
   bi.bmiHeader.biHeight := ASize;
-	bi.bmiHeader.biPlanes := 1;
-	bi.bmiHeader.biBitCount := 32;
-	rc := TRect.Create(0, 0, ASize, ASize);
-	dc := CreateCompatibleDC(0);
-  bmp := CreateDIBSection(dc, bi, DIB_RGB_COLORS, bits, 0, 0);
-	bmp0 := SelectObject(dc, bmp);
-	FillRect(dc, rc, HBRUSH(GetStockObject(BLACK_BRUSH)));
-	DrawIconEx(dc, 0, 0, AIcon, ASize, ASize, 0, 0, DI_NORMAL);
-	SelectObject(dc, bmp0);
-	DeleteDC(dc);
-	Result := bmp;
+  bi.bmiHeader.biPlanes := 1;
+  bi.bmiHeader.biBitCount := 32;
+  var bits := nil;
+  var dc := CreateCompatibleDC(0);
+  var bmp := CreateDIBSection(dc, bi, DIB_RGB_COLORS, bits, 0, 0);
+  var bmp0 := SelectObject(dc, bmp);
+  FillRect(dc, Rect(0, 0, ASize, ASize), HBRUSH(GetStockObject(BLACK_BRUSH)));
+  DrawIconEx(dc, 0, 0, AIcon, ASize, ASize, 0, 0, DI_NORMAL);
+  SelectObject(dc, bmp0);
+  DeleteDC(dc);
+  Result := bmp;
 end;
 
-procedure ExplorerMenuPopup(const AWnd: HWND; const APidl: PItemIDList;
-  const AScrPt: TPoint; const AShift: Boolean; const ASubMenu: HMENU);
+procedure ExplorerMenuPopup(AHandle: HWND; const APidl: PItemIDList; const APoint: TPoint; AShift: Boolean;
+  ASubMenu: HMENU);
 
-  procedure RemoveMultipleSeparators(const AMenu: HMENU);
-  var i, count: Integer;
-      separator: Boolean;
-      mi: TMenuItemInfo;
+  procedure RemoveMultipleSeparators(AMenu: HMENU);
+  var
+    mi: TMenuItemInfo;
   begin
     FillChar(mi, SizeOf(mi), 0);
     mi.cbSize := SizeOf(mi);
     mi.fMask := MIIM_FTYPE;
-    separator := True;
-    count := GetMenuItemCount(AMenu);
-    i := 0;
+    var separator := True;
+    var count := GetMenuItemCount(AMenu);
+    var i := 0;
     while (i < count) do
     begin
       mi.fType := 0;
       if (GetMenuItemInfo(AMenu, i, True, mi))
          and (mi.fType = MFT_SEPARATOR)
          and separator
-      then DeleteMenu(AMenu, i, MF_BYPOSITION)
-      else Inc(i);
-      separator := mi.fType = MFT_SEPARATOR
+      then begin
+        DeleteMenu(AMenu, i, MF_BYPOSITION);
+        count := GetMenuItemCount(AMenu);
+      end
+      else begin
+        Inc(i);
+      end;
+      separator := (mi.fType = MFT_SEPARATOR);
     end;
+
     if (count > 0) and separator
     then DeleteMenu(AMenu, count-1, MF_BYPOSITION);
   end;
 
 var
   NeedUninitialize: Boolean;
-  Menu: HMenu;
+  Menu: HMENU;
   ICMenu: IContextMenu;
   uFlags: UINT;
   i, n, insertBefore: Integer;
   id: Cardinal;
   verbcmd: array[0..MAXBYTE] of AnsiChar;
-	Command: LongBool;
+  Command: LongBool;
   iCmd: Integer;
   Info: TCMInvokeCommandInfoEx;
   CallbackWindow: HWND;
@@ -138,7 +135,7 @@ var
 begin
   NeedUninitialize := Succeeded(CoInitializeEx(nil, COINIT_MULTITHREADED));
   try
-    if Succeeded(GetUIObjectOfPidl(AWnd, APidl, IID_IContextMenu, ICMenu))
+    if Succeeded(GetUIObjectOfPidl(AHandle, APidl, IID_IContextMenu, ICMenu))
     then try
       CallbackWindow := 0; hbmp := 0;
       Menu := CreatePopupMenu;
@@ -161,9 +158,8 @@ begin
               id := GetMenuItemID(Menu, i);
               if (id >= SCRATCH_QCM_FIRST)
                  and (id <= SCRATCH_QCM_LAST)
-                 and Succeeded(ICMenu.GetCommandString(id-SCRATCH_QCM_FIRST, GCS_VERBA, nil,
-                      verbcmd, Length(verbcmd)))
-                 and SameStr(String(verbcmd), 'properties')
+                 and Succeeded(ICMenu.GetCommandString(id-SCRATCH_QCM_FIRST, GCS_VERBA, nil, verbcmd, Length(verbcmd)))
+                 and SameText(string(verbcmd), 'properties')
               then begin
                 insertBefore := i;
                 Break;
@@ -204,54 +200,53 @@ begin
             RemoveMultipleSeparators(Menu);
           end;
 
-          ICMenu.QueryInterface(IContextMenu2, g_cm2);
-          ICMenu.QueryInterface(IContextMenu3, g_cm3);
-          CallbackWindow := CreateMenuCallbackWnd;
+          ICMenu.QueryInterface(IContextMenu2, pContextMenu2);
+          ICMenu.QueryInterface(IContextMenu3, pContextMenu3);
+          CallbackWindow := CreateMenuCallbackWindow;
 
-					try
-						Command := TrackPopupMenuEx(Menu, TPM_RETURNCMD or TPM_RIGHTBUTTON,
-              AScrPt.X, AScrPt.Y, CallbackWindow, nil);
-					finally
-						g_cm2 := nil;
-						g_cm3 := nil;
-						if (hbmp <> 0)
+          try
+            Command := TrackPopupMenuEx(Menu, TPM_RETURNCMD or TPM_RIGHTBUTTON, APoint.X, APoint.Y, CallbackWindow, nil);
+          finally
+            pContextMenu2 := nil;
+            pContextMenu3 := nil;
+            if (hbmp <> 0)
             then DeleteObject(hbmp);
-					end;
+          end;
 
           if (Command)
-					then begin
-						iCmd := LongInt(Command);
-						if (iCmd < SCRATCH_QCM_FIRST)
-            then PostMessage(AWnd, LM_CM_ITEMS, 0, iCmd)
-						else begin
-							iCmd := iCmd - SCRATCH_QCM_FIRST;
-							verbcmd[0] := #0;
-							if Succeeded(ICMenu.GetCommandString(iCmd, GCS_VERBA, nil,verbcmd, SizeOf(verbcmd)))
-								 and SameStr(String(verbcmd), 'rename')
-							then PostMessage(AWnd, LM_CM_RENAME, 0, 0)
-							else begin
-								FillChar(Info, SizeOf(Info), 0);
-								Info.cbSize := SizeOf(Info);
-								Info.fMask := CMIC_MASK_UNICODE
-									or CMIC_MASK_PTINVOKE
-									or CMIC_MASK_FLAG_LOG_USAGE
-									or CMIC_MASK_NOASYNC;
-								if (GetKeyState(VK_CONTROL) < 0)
-								then Info.fMask := Info.fMask or CMIC_MASK_CONTROL_DOWN;
-								if (GetKeyState(VK_SHIFT) < 0)
-								then Info.fMask := Info.fMask or CMIC_MASK_SHIFT_DOWN;
-								Info.hwnd := AWnd;
-								Info.nShow := SW_SHOWNORMAL;
-								Info.lpVerb := MakeIntResourceA(iCmd);
-								Info.lpVerbW := MakeIntResourceW(iCmd);
-								Info.ptInvoke := AScrPt;
-                PostMessage(AWnd, LM_CM_INVOKE, 0, iCmd);
-								EnableWindow(AWnd, False);
-								ICMenu.InvokeCommand(PCMInvokeCommandInfo(@Info)^);
-								EnableWindow(AWnd, True);
-							end;
-						end;
-					end;
+          then begin
+            iCmd := LongInt(Command);
+            if (iCmd < SCRATCH_QCM_FIRST)
+            then PostMessage(AHandle, LM_CM_ITEMS, 0, iCmd)
+            else begin
+              iCmd := iCmd - SCRATCH_QCM_FIRST;
+              verbcmd[0] := #0;
+              if Succeeded(ICMenu.GetCommandString(iCmd, GCS_VERBA, nil,verbcmd, SizeOf(verbcmd)))
+                 and SameText(string(verbcmd), 'rename')
+              then PostMessage(AHandle, LM_CM_RENAME, 0, 0)
+              else begin
+                FillChar(Info, SizeOf(Info), 0);
+                Info.cbSize := SizeOf(Info);
+                Info.fMask := CMIC_MASK_UNICODE
+                  or CMIC_MASK_PTINVOKE
+                  or CMIC_MASK_FLAG_LOG_USAGE
+                  or CMIC_MASK_NOASYNC;
+                if (GetKeyState(VK_CONTROL) < 0)
+                then Info.fMask := Info.fMask or CMIC_MASK_CONTROL_DOWN;
+                if (GetKeyState(VK_SHIFT) < 0)
+                then Info.fMask := Info.fMask or CMIC_MASK_SHIFT_DOWN;
+                Info.hwnd := AHandle;
+                Info.nShow := SW_SHOWNORMAL;
+                Info.lpVerb := MakeIntResourceA(iCmd);
+                Info.lpVerbW := MakeIntResourceW(iCmd);
+                Info.ptInvoke := APoint;
+                PostMessage(AHandle, LM_CM_INVOKE, 0, iCmd);
+                EnableWindow(AHandle, False);
+                ICMenu.InvokeCommand(PCMInvokeCommandInfo(@Info)^);
+                EnableWindow(AHandle, True);
+              end;
+            end;
+          end;
         end;
       finally
         DestroyMenu(Menu);
@@ -267,28 +262,25 @@ begin
   end;
 end;
 
-procedure OpenByDefaultVerb(const AWnd: HWND; const APidl: PItemIDList);
+procedure OpenByDefaultVerb(AHandle: HWND; const APidl: PItemIDList);
 var
   pMenu: IContextMenu;
-  Menu: HMENU;
-  id: UINT;
-  Info: TCMInvokeCommandInfo;
 begin
-  if Succeeded(GetUIObjectOfPidl(AWnd, APidl, IID_IContextMenu, pMenu))
+  if Succeeded(GetUIObjectOfPidl(AHandle, APidl, IID_IContextMenu, pMenu))
   then try
-    Menu := CreatePopupMenu;
-    if (Menu <> 0)
+    var menu := CreatePopupMenu;
+    if (menu <> 0)
     then try
-      if Succeeded(pMenu.QueryContextMenu(Menu, 0, FCIDM_SHVIEWFIRST,
-        FCIDM_SHVIEWLAST, CMF_DEFAULTONLY))
+      if Succeeded(pMenu.QueryContextMenu(menu, 0, FCIDM_SHVIEWFIRST, FCIDM_SHVIEWLAST, CMF_DEFAULTONLY))
       then begin
-        id := GetMenuDefaultItem(Menu, 0, 0);
+        var id: UINT := GetMenuDefaultItem(menu, 0, 0);
         if (id <> UINT(-1))
         then begin
+          var Info: TCMInvokeCommandInfo;
           FillChar(Info, SizeOf(Info), 0);
           Info.cbSize := SizeOf(Info);
           Info.fMask := CMIC_MASK_FLAG_LOG_USAGE;
-          Info.hwnd := AWnd;
+          Info.hwnd := GetDesktopWindow;//AHandle;
           Info.nShow := SW_NORMAL;
           Info.lpVerb := MakeIntResourceA(id - FCIDM_SHVIEWFIRST);
           pMenu.InvokeCommand(Info);

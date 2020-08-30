@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2017 Asaq               }
+{            Copyright (c) 2010-2018 Asaq               }
 {*******************************************************}
 
 unit Linkbar.Newbar;
@@ -51,13 +51,13 @@ implementation
 
 {$R *.dfm}
 
-uses ShlObj, System.IniFiles, Vcl.Themes, Linkbar.Common,
-     Linkbar.Shell, Linkbar.Consts, Linkbar.L10n, Linkbar.Themes, MyHint;
+uses Winapi.ShlObj, System.IniFiles, Vcl.Themes, Linkbar.Common,
+     Linkbar.Shell, Linkbar.Consts, Linkbar.L10n, Linkbar.Theme, MyHint;
 
 function GetUserNameEx(NameFormat: DWORD; lpBuffer: LPWSTR; var nSize: DWORD): Boolean;
   stdcall; external 'secur32.dll' Name 'GetUserNameExW';
 
-function GetLoggedOnUserName(out AUserName: String): Boolean;
+function GetLoggedOnUserName(out AUserName: string): Boolean;
 const NameDisplay = 0;
 var buf: array[0..MAX_PATH] of Char;
     len: Cardinal;
@@ -67,15 +67,18 @@ begin
   { GetUserNameEx always return ERROR_NONE_MAPPED = 1332
     "No mapping between account names and security IDs was done" }
   if GetUserNameEx(NameDisplay, buf, len)
-  then AUserName := String(buf)
+  then AUserName := string(buf)
   else begin
     buf[0] := #0;
     len := MAX_PATH;
     if GetUserName(buf, len)
-    then AUserName := String(buf)
+    then AUserName := string(buf)
     else AUserName := '';
   end;
   Result := AUserName <> '';
+{$ifdef DEBUG}
+  AUserName := 'User Name'
+{$endif}
 end;
 
 function TBarCreatorWCl.ScaleDimension(const X: Integer): Integer;
@@ -90,25 +93,25 @@ end;
 
 procedure TBarCreatorWCl.btnCreateClick(Sender: TObject);
 var
-  lini: TIniFile;
-  lfilename, cmd: string;
+  ini: TIniFile;
+  filename, cmd: string;
 begin
   if rbAppDir.Checked
   then begin
     ForceDirectories(InitiatedAppDir);
-    lfilename := InitiatedAppDir + FName;
+    filename := InitiatedAppDir + FName;
   end;
   if rbUserDir.Checked
   then begin
     ForceDirectories(InitiatedUserDir);
-    lfilename := InitiatedUserDir + FName;
+    filename := InitiatedUserDir + FName;
   end;
 
-  lini := TIniFile.Create(lfilename);
-  lini.WriteString(INI_SECTION_MAIN, INI_DIR_LINKS, FWorkinDirectoryPath);
-  lini.Free;
+  ini := TIniFile.Create(filename);
+  ini.WriteString(INI_SECTION_MAIN, INI_DIR_LINKS, FWorkinDirectoryPath);
+  ini.Free;
 
-  cmd := LBCreateCommandParam(CLK_FILE, lfilename);
+  cmd := LBCreateCommandParam(CLK_FILE, filename);
   if (Locale <> '')
   then cmd := LBCreateCommandParam(CLK_LANG, Locale) + cmd;
   LBCreateProcess(ParamStr(0), cmd);
@@ -124,7 +127,7 @@ begin
   L10nControl(rbUserDir,  'New.ForMe');
   L10nControl(lblWorkDir, 'New.Folder');
   L10nControl(btnCreate,  'New.Create');
-  L10nControl(btnCancel,  'New.Cancel');
+  L10nControl(btnCancel,  'Button.Cancel');
 end;
 
 procedure TBarCreatorWCl.Button1Click(Sender: TObject);
@@ -197,8 +200,8 @@ begin
   ClientHeight := btnSetWorkDir.BoundsRect.Bottom + 2*d + Panel1.Height;
 end;
 
+{ Prevent window resizing }
 procedure TBarCreatorWCl.WMNCHitTest(var Message: TWMNCHitTest);
-// Disable window resize
 begin
   inherited;
   PreventSizing(Message.Result);

@@ -16,9 +16,9 @@ const
   // MUI
 
   // New shortcut file name
-  // shell32.dll.mui - String table - ?
+  // shell32.dll.mui - string table - ?
   LB_FN_NEWSHORTCUT  = 'shell32.dll';
-	LB_RS_NSC_FILENAME = 30397;
+  LB_RS_NSC_FILENAME = 30397;
 
   // Autohide fail message
   // explorerframe.dll.mui
@@ -27,7 +27,7 @@ const
   LB_RS_TB_NEWTOOLBAROPENDIALOGTITLE = 12387;
 
   // Invalid file name symbols
-  // shell32.dll.mui - String table - 257, 793
+  // shell32.dll.mui - string table - 257, 793
   LB_FN_INVALIDFILENAMECHARS = 'shell32.dll';
   LB_RS_IFNC_HINT = 4109;
 
@@ -38,16 +38,16 @@ const
 
   procedure L10nLoad(const APath: string; const AForcedLocale: string = '');
   function  L10NFind(const AName: string; const ADefault: string = ''): string;
-  function  L10nMui(const AModuleName: String; const AStringID: Cardinal): String; overload;
-  function  L10nMui(const AModule: HINST; const AStringID: Cardinal): String; overload;
-  procedure L10nControl(AControl: TForm;        const AName: String); overload;
-  procedure L10nControl(AControl: TMenuItem;    const AName: String); overload;
-  procedure L10nControl(AControl: TLabel;       const AName: String); overload;
-  procedure L10nControl(AControl: TCheckbox;    const AName: String); overload;
-  procedure L10nControl(AControl: TRadioButton; const AName: String); overload;
-  procedure L10nControl(AControl: TButton;      const AName: String); overload;
-  procedure L10nControl(AControl: TTabSheet;    const AName: String); overload;
-  procedure L10nControl(AControl: TComboBox;    const ANames: array of String); overload;
+  function  L10nMui(const AModuleName: string; const AStringID: Cardinal): string; overload;
+  function  L10nMui(const AModule: HINST; const AStringID: Cardinal): string; overload;
+  procedure L10nControl(AControl: TForm;        const AName: string); overload;
+  procedure L10nControl(AControl: TMenuItem;    const AName: string); overload;
+  procedure L10nControl(AControl: TLabel;       const AName: string); overload;
+  procedure L10nControl(AControl: TCheckbox;    const AName: string); overload;
+  procedure L10nControl(AControl: TRadioButton; const AName: string); overload;
+  procedure L10nControl(AControl: TButton;      const AName: string); overload;
+  procedure L10nControl(AControl: TTabSheet;    const AName: string); overload;
+  procedure L10nControl(AControl: TComboBox;    const ANames: array of string); overload;
 
 var
   Locale: string = '';
@@ -74,7 +74,7 @@ type
   end;
 
 { Return localized string by ModuleInstance and StringID }
-function L10nMui(const AModule: HINST; const AStringID: Cardinal): String;
+function L10nMui(const AModule: HINST; const AStringID: Cardinal): string;
 var p: PChar;
 begin
   if (AModule <> 0)
@@ -84,7 +84,7 @@ begin
 end;
 
 { Return localized string by ModuleName and StringID }
-function L10nMui(const AModuleName: String; const AStringID: Cardinal): String;
+function L10nMui(const AModuleName: string; const AStringID: Cardinal): string;
 var h: THandle;
 begin
   h := LoadLibraryEx(PChar(AModuleName), 0, LOAD_LIBRARY_AS_DATAFILE);
@@ -93,42 +93,42 @@ begin
   then FreeLibrary(h);
 end;
 
-procedure L10nControl(AControl: TForm; const AName: String); overload;
+procedure L10nControl(AControl: TForm; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TMenuItem; const AName: String); overload;
+procedure L10nControl(AControl: TMenuItem; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TLabel; const AName: String); overload;
+procedure L10nControl(AControl: TLabel; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TCheckbox; const AName: String); overload;
+procedure L10nControl(AControl: TCheckbox; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TRadioButton; const AName: String); overload;
+procedure L10nControl(AControl: TRadioButton; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TButton; const AName: String); overload;
+procedure L10nControl(AControl: TButton; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TTabSheet; const AName: String); overload;
+procedure L10nControl(AControl: TTabSheet; const AName: string); overload;
 begin
   AControl.Caption := L10NFind(AName, AControl.Caption);
 end;
 
-procedure L10nControl(AControl: TComboBox; const ANames: array of String); overload;
+procedure L10nControl(AControl: TComboBox; const ANames: array of string); overload;
 var i: Integer;
 begin
 {$IFDEF DEBUG}

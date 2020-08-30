@@ -5,6 +5,8 @@
 
 unit ColorUtils;
 
+{$i linkbar.inc}
+
 interface
 
 uses

@@ -1,10 +1,5 @@
 program Linkbar;
 
-{$IFNDEF DEBUG}
-  {$IFOPT D-}{$WEAKLINKRTTI ON}{$ENDIF}
-  {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
-{$ENDIF}
-
 {$i linkbar.inc}
 
 uses
@@ -25,7 +20,8 @@ uses
   Linkbar.L10n,
   Linkbar.SettingsForm in 'Linkbar.SettingsForm.pas' {FrmProperties},
   Linkbar.Graphics in 'Linkbar.Graphics.pas',
-  Linkbar.Themes in 'Linkbar.Themes.pas',
+  Linkbar.Theme in 'Linkbar.Theme.pas',
+  Linkbar.DarkTheme in 'Linkbar.DarkTheme.pas',
   Linkbar.Settings in 'Linkbar.Settings.pas';
 
 {$R *.res}
@@ -46,15 +42,17 @@ var dn, cmd: string;
 begin
 {$IFDEF DEBUG}
   ReportMemoryLeaksOnShutdown := True;
+  //AllocConsole;
+  //DebugWriteln('Debug output enabled.');
 {$ENDIF}
 
   { Check supported OS }
   if not IsMinimumSupportedOS
   then begin
     MessageDlg('Sorry :('
-      + #13 + 'Linkbar not support your operating system.'
+      + #13 + 'Linkbar doesn''t support your operating system.'
       + #13
-      + #13 + 'Minimum supported client: Windows 7'
+      + #13 + 'Minimum supported client: Windows Vista'
       + #13 + 'Minimum supported server: Windows Server 2008 R2',
       mtWarning, [mbClose], 0);
     Exit;
@@ -64,8 +62,11 @@ begin
   delay := 0;
   if FindCmdLineSwitch(CLK_DELAY, cmd, True)
      and TryStrToInt(cmd, delay)
-     and (delay > 0)
+     and (delay > 0) {and (delay < INFINITE)}
   then Sleep(delay);
+
+  InitDarkMode;
+  AllowDarkModeForApp(true);
 
   { Check CMD Language }
   FindCmdLineSwitch(CLK_LANG, cmd, True);
@@ -78,12 +79,22 @@ begin
     Exit;
   end;
 
+  { Check CMD New Linkbar }
+  if FindCmdLineSwitch(CLK_CLOSEALL, True)
+  then begin
+    Application.Initialize;
+    Application.MainFormOnTaskBar := False;
+    TLinkbarWcl.CloseAll;
+    Application.Run;
+    Exit;
+  end;
+
   if FindCmdLineSwitch(CLK_FILE, FSettingsFileName, True)
      and SameText(ExtractFileExt(FSettingsFileName), EXT_LBR)
      and TFile.Exists(FSettingsFileName)
   then begin
     // delete profile if working directory invalid
-    if not TSettings.IsValid(FSettingsFileName)
+    if not TSettingsFile.IsValid(FSettingsFileName)
     then begin
       TFile.Delete(FSettingsFileName);
       Exit;
@@ -120,7 +131,7 @@ begin
       for i := 0 to sl.Count-1 do
       begin
         // delete profile if working directory invalid
-        if not TSettings.IsValid(sl[i])
+        if not TSettingsFile.IsValid(sl[i])
         then begin
           TFile.Delete(sl[i]);
           Continue;
