@@ -1328,6 +1328,7 @@ begin
           FMouseDragLinkbar := False;
           FMonitorNum := FDragMonitorNum;
           Align := FDragAlign;
+          TSettingsFile.Write(FSettingsFileName, INI_MONITORNUM, FMonitorNum);
           TSettingsFile.Write(FSettingsFileName, INI_EDGE, Integer(FAlign));
         end
         else if FMouseDragItem
@@ -1937,7 +1938,6 @@ begin
   then Exit;
 
   FSortAlphabetically := AValue;
-  // Save setting
   TSettingsFile.Write(FSettingsFileName, INI_SORT_AB, FSortAlphabetically);
 
   if FSortAlphabetically

@@ -10,7 +10,7 @@ unit Linkbar.Hint;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, Winapi.CommCtrl, System.Classes, Vcl.Controls;
+  Winapi.Windows, Winapi.Messages, Winapi.CommCtrl, System.Classes, System.Types, Vcl.Controls;
 
 type
   TTooltip32 = class
@@ -134,7 +134,7 @@ begin
   TipToolInfo.lpszText := Pointer(AText);
   SendMessage(TipHwnd, TTM_UPDATETIPTEXT, 0, LPARAM(@TipToolInfo));
 
-  SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, MakeLParam(pt.X, pt.Y));
+  SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, PointToLParam(pt));
   SendMessage(TipHwnd, TTM_TRACKACTIVATE, WPARAM(True), LPARAM(@TipToolInfo));
 
   GetWindowRect(TipHwnd, wr);
@@ -150,7 +150,7 @@ begin
   wr.Location := pt;
 
   npt := FitTipRect(wr, GetMonRectFromPoint(APos));
-  SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, MakeLParam(npt.X, npt.Y));
+  SendMessage(TipHwnd, TTM_TRACKPOSITION, 0, PointToLParam(npt));
 
   SetWindowPos(TipHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
 end;

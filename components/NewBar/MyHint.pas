@@ -8,7 +8,7 @@ unit MyHint;
 interface
 
 uses 
-  System.Classes, System.SysUtils,
+  System.Classes, System.SysUtils, System.Types,
   Winapi.Windows, Winapi.CommCtrl, Winapi.Messages,
   Vcl.Controls;
 
@@ -32,7 +32,7 @@ begin
   inherited;
   TooltipInfo.lpszText := PChar(AHint);
   SendMessage(TooltipWnd, TTM_UPDATETIPTEXT, 0, LParam(@TooltipInfo));
-  SendMessage(TooltipWnd, TTM_TRACKPOSITION, 0, MakeLParam(Rect.TopLeft.X, Rect.TopLeft.Y));
+  SendMessage(TooltipWnd, TTM_TRACKPOSITION, 0, PointToLParam(Rect.TopLeft));
   SendMessage(TooltipWnd, TTM_TRACKACTIVATE, WParam(True), LParam(@TooltipInfo));
 end;
 
