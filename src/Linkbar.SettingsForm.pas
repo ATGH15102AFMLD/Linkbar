@@ -408,11 +408,7 @@ begin
   linkEmail.Left := linkGithub.Left;
   linkWeb.Left := linkGithub.Left;
 
-  lblSysInfo.Caption := TOSVersion.ToString
-      + ' '  + Languages.LocaleName[Languages.IndexOf(Languages.UserDefaultLocale)]
-      + ' '  + IntToStr(Languages.UserDefaultLocale)
-      + ' (' + IntToHex(Languages.UserDefaultLocale, 3) + ')'
-      + ' '  + Languages.NameFromLocaleID[Languages.UserDefaultLocale];
+  lblSysInfo.Caption := SystemInfo;
 
   FCanChanged := True;
   Changed(nil);

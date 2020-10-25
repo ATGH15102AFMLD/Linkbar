@@ -34,9 +34,40 @@ var
 
   VersionToString: string;
 
+  function SystemInfo: string;
+
 implementation
 
-{ TMyVersion }
+uses System.SysConst;
+
+function SystemInfo: string;
+var
+  langLocaleId: TLocaleID;
+  langName, langLocaleName: String;
+  index: Integer;
+begin
+  langLocaleId := TLanguages.UserDefaultLocale;
+  langName := sUnknown;
+  langLocaleName := sUnknown;
+
+  index := Languages.IndexOf(langLocaleId);
+  if (index <> - 1)
+  then begin
+    langName := Languages.Name[index];
+    if (langName = '')
+    then langName := sUnknown;
+
+    langLocaleName := Languages.LocaleName[index];
+    if (langLocaleName = '')
+    then langLocaleName := sUnknown;
+  end;
+
+  Result := TOSVersion.ToString
+    + ' '  + langLocaleName
+    + ' '  + IntToStr(langLocaleId)
+    + ' (' + IntToHex(langLocaleId, 3) + ')'
+    + ' '  + langName;
+end;
 
 function GetVersionString: string;
 var resInfo: HRSRC;
