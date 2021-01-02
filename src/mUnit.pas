@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2018 Asaq               }
+{            Copyright (c) 2010-2021 Asaq               }
 {*******************************************************}
 
 unit mUnit;
@@ -22,7 +22,7 @@ type
     pMenu: TPopupMenu;
     imClose: TMenuItem;
     imProperties: TMenuItem;
-    imAddBar: TMenuItem;
+    imNewLinkbar: TMenuItem;
     imRemoveBar: TMenuItem;
     N1: TMenuItem;
     N2: TMenuItem;
@@ -47,7 +47,7 @@ type
     procedure imPropertiesClick(Sender: TObject);
     procedure imRemoveBarClick(Sender: TObject);
     procedure imCloseClick(Sender: TObject);
-    procedure imAddBarClick(Sender: TObject);
+    procedure imNewLinkbarClick(Sender: TObject);
     procedure imNewShortcutClick(Sender: TObject);
     procedure tmrUpdateTimer(Sender: TObject);
     procedure imCloseAllClick(Sender: TObject);
@@ -306,7 +306,7 @@ end;
 
 class procedure TLinkbarWcl.CloseAll;
 begin
-  if MessageDlg('Close all linkbars?',//L10NFind('Message.CloseAll', 'Close all linkbars?'),
+  if MessageDlg(L10NFind('Message.CloseAll', 'Close all linkbars?'),
         mtConfirmation, [mbOK, mbCancel], 0, mbCancel) = mrOk
   then begin
     EnumWindows(@EnumWindowProcStopDirWatch, 0);
@@ -1001,8 +1001,8 @@ begin
   L10nControl(imNew,          'Menu.New');
   L10nControl(imNewShortcut,  'Menu.Shortcut');
   L10nControl(imNewSeparator, 'Menu.Separator');
+  L10nControl(imNewLinkbar,   'Menu.Linkbar');
   L10nControl(imOpenWorkdir,  'Menu.Open');
-  L10nControl(imAddBar,       'Menu.Create');
   L10nControl(imRemoveBar,    'Menu.Delete');
   L10nControl(imLockBar,      'Menu.Lock');
   L10nControl(imSortAlphabet, 'Menu.Sort');
@@ -2363,7 +2363,7 @@ begin
   TSettingsFile.Write(FSettingsFileName, INI_LOCK_BAR, FLockLinkbar);
 end;
 
-procedure TLinkbarWcl.imAddBarClick(Sender: TObject);
+procedure TLinkbarWcl.imNewLinkbarClick(Sender: TObject);
 var cmd: string;
 begin
   cmd := LBCreateCommandParam(CLK_NEW, '');

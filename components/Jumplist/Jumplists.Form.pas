@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2018 Asaq               }
+{            Copyright (c) 2010-2021 Asaq               }
 {*******************************************************}
 
 unit Jumplists.Form;
@@ -1944,7 +1944,7 @@ begin
       begin
         // Unpin
         mi := FPopupMenu.CreateMenuItem;
-        mi.Caption := L10NFind('JumpList.Unpin', '&Unpin from this list');
+        mi.Caption := L10NFind('Jumplist.Unpin', '&Unpin from this list');
         mi.OnClick := OnJumpListUnPin;
         FPopupMenu.Items.Add(mi);
       end;
@@ -1952,12 +1952,12 @@ begin
       begin
         // Pin
         mi := FPopupMenu.CreateMenuItem;
-        mi.Caption := L10NFind('JumpList.Pin', 'P&in to this list');
+        mi.Caption := L10NFind('Jumplist.Pin', 'P&in to this list');
         mi.OnClick := OnJumpListPin;
         FPopupMenu.Items.Add(mi);
         // Remove
         mi := FPopupMenu.CreateMenuItem;
-        mi.Caption := L10NFind('JumpList.Remove', 'Remove &from this list');
+        mi.Caption := L10NFind('Jumplist.Remove', 'Remove &from this list');
         mi.OnClick := OnJumpListRemove;
         FPopupMenu.Items.Add(mi);
       end;

@@ -1,3 +1,9 @@
+{$IFDEF DEBUG}
+// JCL_DEBUG_EXPERT_GENERATEJDBG OFF
+// JCL_DEBUG_EXPERT_INSERTJDBG OFF
+// JCL_DEBUG_EXPERT_DELETEMAPFILE OFF
+{$ENDIF}
+
 program Linkbar;
 
 {$i linkbar.inc}
@@ -15,6 +21,9 @@ uses
   Linkbar.Consts,
   Linkbar.OS,
   mUnit in 'mUnit.pas',
+{$IFDEF DEBUG}
+  Linkbar.ExceptionDialog,
+{$ENDIF}
   Linkbar.Newbar,
   Linkbar.Shell,
   Linkbar.L10n,
@@ -42,8 +51,6 @@ var dn, cmd: string;
 begin
 {$IFDEF DEBUG}
   ReportMemoryLeaksOnShutdown := True;
-  //AllocConsole;
-  //DebugWriteln('Debug output enabled.');
 {$ENDIF}
 
   { Check supported OS }

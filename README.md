@@ -1,10 +1,9 @@
 
 
 
-![Delphi](https://img.shields.io/badge/Delphi-XE3-red.svg)
+![Delphi](https://img.shields.io/badge/Delphi-10.3_CE-red.svg)
 ![Windows](https://img.shields.io/badge/Windows-Vista--10-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
-[![Join the chat at https://gitter.im/Linkbar/linkbar](https://badges.gitter.im/Linkbar/linkbar.svg)](https://gitter.im/Linkbar/linkbar?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
 
 
 What is Linkbar ?
@@ -20,7 +19,7 @@ See [README.txt](https://github.com/ATGH15102AFMLD/Linkbar/blob/master/exe/READM
 
 Build
 -------------------------------
-Build with Embarcadero Delphi XE3 or higher
+Build with Embarcadero Delphi 10.3 Community Edition or higher
 
 Download
 -------------------------------

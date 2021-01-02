@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2018 Asaq               }
+{            Copyright (c) 2010-2021 Asaq               }
 {*******************************************************}
 
 unit ExplorerMenu;

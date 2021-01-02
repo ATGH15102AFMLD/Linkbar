@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2018 Asaq               }
+{            Copyright (c) 2010-2021 Asaq               }
 {*******************************************************}
 
 unit Linkbar.SettingsForm;
@@ -32,7 +32,7 @@ type
     linkEmail: TLinkLabel;
     linkWeb: TLinkLabel;
     lblWeb: TLabel;
-    Label2: TLabel;
+    lblSystemInfo: TLabel;
     chbAutoHideTransparency: TCheckBox;
     cbbScreenPosition: TComboBox;
     pnlDummy1: TPanel;
@@ -68,11 +68,11 @@ type
     pnlDummy8: TPanel;
     edtBkgndColor: TEdit;
     chbUseBkgndColor: TCheckBox;
-    chbUseTextColor: TCheckBox;
+    chbTextColor: TCheckBox;
     bvlSpacer2: TBevel;
     bvlSpacer3: TBevel;
     pnlDummy9: TPanel;
-    lblGlowSize: TLabel;
+    lblTextGlowSize: TLabel;
     nseGlowSize: TnSpinEdit;
     clbTextColor: TColorBox;
     pnlLightStyle: TPanel;
@@ -108,10 +108,10 @@ type
     pnlDummy5: TPanel;
     lblItemsAlign: TLabel;
     cbbItemsAlign: TComboBox;
-    TabSheetPanel: TTabSheet;
-    TabSheetItems: TTabSheet;
+    tsPanel: TTabSheet;
+    tsItems: TTabSheet;
     lblShortcuts: TLabel;
-    TabSheetAutoHide: TTabSheet;
+    tsAutoHide: TTabSheet;
     lblSeperators: TLabel;
     pnlSeparator1: TPanel;
     lblSeparatorWidth: TLabel;
@@ -348,14 +348,14 @@ begin
   InitSpinEdit(nseJumplistRecentMax, JUMPLIST_RECENTMAX_MIN, JUMPLIST_RECENTMAX_MAX);
 
 
-  pgc1.Height := TabSheetPanel.Top + pnlSeparator2.BoundsRect.Bottom + VO2 + TabSheetPanel.Left;
+  pgc1.Height := tsPanel.Top + pnlSeparator2.BoundsRect.Bottom + VO2 + tsPanel.Left;
 
   btnOk.Top := pgc1.BoundsRect.Bottom + ScaleDimension(8);
   btnCancel.Top := btnOk.Top;
   btnApply.Top := btnOk.Top;
 
   // Calc Client Width & Height
-  ClientWidth := maxlabelwidth + ctrlwidth + (pnlDummy1.Left + TabSheetPanel.Left + pgc1.Left) * 2;
+  ClientWidth := maxlabelwidth + ctrlwidth + (pnlDummy1.Left + tsPanel.Left + pgc1.Left) * 2;
   //if IsWindows7 then y1 := 5 else y1 := 8;
   y1 := 5;
   ClientHeight := btnOk.BoundsRect.Bottom + ScaleDimension(y1);
@@ -385,7 +385,7 @@ begin
   nseAutoShowDelay.Value := FLinkbar.AutoShowDelay;
   chbLightStyle.Checked := FLinkbar.IsLightStyle;
   chbUseBkgndColor.Checked := FLinkbar.UseBkgndColor;
-  chbUseTextColor.Checked := FLinkbar.UseTextColor;
+  chbTextColor.Checked := FLinkbar.UseTextColor;
   cbbJumplistShowMode.ItemIndex := Ord(FLinkbar.JumplistShowMode);
   nseJumplistRecentMax.Value := FLinkbar.JumplistRecentMax;
   chbStayOnTop.Checked := FLinkbar.StayOnTop;
@@ -417,30 +417,51 @@ end;
 
 procedure TFrmProperties.L10n;
 begin
-  // Tabs
-  //L10nControl(TabSheetPanel,           'Properties.View');
-  //L10nControl(TabSheetItems,           'Properties.PageItems');
-  L10nControl(TabSheetAutoHide,        'Properties.PageAutoHide');
-  L10nControl(tsAdditionally,          'Properties.Additional');
-  L10nControl(tsAbout,                 'Properties.About');
-  // View
+  // Pages
+  L10nControl(tsPanel,                 'Properties.PagePanel');
+  L10nControl(tsItems,                 'Properties.PageItems');
+  L10nControl(tsAutoHide,              'Properties.PageAutoHide');
+  L10nControl(tsAdditionally,          'Properties.PageAdditional');
+  L10nControl(tsAbout,                 'Properties.PageAbout');
+
+  // Panel
   L10nControl(lblSection1,             'Properties.Appearance');
   L10nControl(lblScreenEdge,           'Properties.Position');
   L10nControl(cbbScreenPosition,      ['Properties.Left', 'Properties.Top', 'Properties.Right', 'Properties.Bottom']);
-  L10nControl(lblIconSize,             'Properties.IconSize');
-  L10nControl(chbUseBkgndColor,        'Properties.BgColor');
-  L10nControl(lblMargin,               'Properties.Margins');
   L10nControl(lblOrder,                'Properties.Order');
-  //L10nControl(lblItemsAlign,           'Properties.ItemsAlign');
-  //L10nControl(cbbItemsAlign,          ['Properties.Left', 'Properties.Center']);
-  //L10nControl(chbTooltipShow,          'Properties.TooltipShow');
   L10nControl(cbbItemOrder,           ['Properties.LtR', 'Properties.UtD']);
+  L10nControl(lblItemsAlign,           'Properties.ItemsAlign');
+  L10nControl(cbbItemsAlign,          ['Properties.Left', 'Properties.Center']);
+  L10nControl(chbUseBkgndColor,        'Properties.BgColor');
+  L10nControl(chbStayOnTop,            'Properties.AlwaysOnTop');
+
+  // Windows specific
+  L10nControl(lblSectionWindows,       'Properties.ForWindows');
+  // Windows 7
+  L10nControl(chbLightStyle,           'Properties.Style1');
+  // Windows 8
+  L10nControl(chbAeroGlass,            'Properties.AeroGlass');
+  // Windows 10
+  L10nControl(lblColorMode,            'Properties.Theme');
+  L10nControl(cbbColorMode,           ['Properties.Light', 'Properties.Dark', 'Properties.Accent']);
+  L10nControl(lblTransparencyMode,     'Properties.Transparency');
+  L10nControl(cbbTransparencyMode,    ['Properties.Opaque', 'Properties.Transparent', 'Properties.Glass']);
+
+  // Items
+  L10nControl(lblShortcuts,            'Properties.Shortcuts');
+  L10nControl(lblIconSize,             'Properties.IconSize');
+  L10nControl(lblMargin,               'Properties.Margins');
   L10nControl(lblTextPosition,         'Properties.TextPos');
   L10nControl(cbbTextLayout,          ['Properties.Without' , 'Properties.Left', 'Properties.Top', 'Properties.Right', 'Properties.Bottom']);
   L10nControl(lblTextWidthIdent,       'Properties.TextWidth');
-  L10nControl(chbUseTextColor,         'Properties.TextColor');
-  L10nControl(lblGlowSize,             'Properties.GlowSize');
-  L10nControl(chbStayOnTop,            'Properties.AlwaysOnTop');
+  L10nControl(chbTextColor,            'Properties.TextColor');
+  L10nControl(lblTextGlowSize,         'Properties.GlowSize');
+  L10nControl(chbTooltipShow,          'Properties.ShowTooltips');
+  L10nControl(lblSeperators,           'Properties.Separators');
+  L10nControl(lblSeparatorWidth,       'Properties.Width');
+  L10nControl(lblSeparatorStyle,       'Properties.Style');
+  L10nControl(cbbSeparatorStyle,      ['Properties.Line', 'Properties.Spacer']);
+
   // Autohide
   L10nControl(lblSection3,             'Properties.AutoHide');
   L10nControl(lbl2,                    'Properties.Hide');
@@ -451,29 +472,18 @@ begin
   L10nControl(lblCornerGapWidth,       'Properties.CornerTransWidth');
   L10nControl(lblHotKey,               'Properties.HotKey');
   L10nControl(chbAutoHideTransparency, 'Properties.AutoHideTransparency');
+
   // Additional
   L10nControl(lblSectionJumplist,       'Properties.Jumplists');
   L10nControl(lblJumplistShowMode,      'Properties.Show');
   L10nControl(cbbJumplistShowMode,     ['Properties.No', 'Properties.MouseRC']);
   L10nControl(lblJumplistRecentMax,     'Properties.JumplistRecentMaxItems');
 
-  {if IsWindows10
-  then L10nControl(lblSectionWindows,   'Properties.ForW10')
-  else if IsWindows7
-  then L10nControl(lblSectionWindows,   'Properties.ForW7')
-  else if IsWindows8And8Dot1
-  then L10nControl(lblSectionWindows,   'Properties.ForW8');}
-
-  L10nControl(chbLightStyle,            'Properties.Style1');
-  L10nControl(chbAeroGlass,             'Properties.AeroGlass');
-  //L10nControl(lblColorMode,             'Properties.ColorMode');
-  //L10nControl(cbbColorMode,            ['Properties.Light', 'Properties.Dark', 'Properties.Accent', 'Properties.Custom']);
-  //L10nControl(lblTransparency,          'Properties.Transparency');
-  //L10nControl(cbbTransparency,         ['Properties.Opaque', 'Properties.Transparent', 'Properties.Glass']);
   // About
   L10nControl(lblVer,                   'Properties.Version');
   L10nControl(lblLocalizer,             'Properties.Localizer');
-  L10nControl(Label2,                   'Properties.SystemInfo');
+  L10nControl(lblSystemInfo,            'Properties.SystemInfo');
+
   // Buttons
   L10nControl(btnOk,                    'Button.Ok');
   L10nControl(btnCancel,                'Button.Cancel');
@@ -566,10 +576,10 @@ begin
   lblTextWidthIdent.Enabled := enabled;
   nseTextWidth.Enabled := enabled;
   nseTextOffset.Enabled := enabled;
-  lblGlowSize.Enabled := enabled;
+  lblTextGlowSize.Enabled := enabled;
   nseGlowSize.Enabled := enabled;
-  chbUseTextColor.Enabled := enabled;
-  clbTextColor.Enabled := enabled and chbUseTextColor.Checked;
+  chbTextColor.Enabled := enabled;
+  clbTextColor.Enabled := enabled and chbTextColor.Checked;
 
   // Check Hotkey
   //if ((Sender = edtHotKey) and (FLinkbar.HotkeyInfo <> edtHotKey.HotkeyInfo))
@@ -608,7 +618,7 @@ begin
   FLinkbar.BackgroundColor := FBackgroundColor;
   FLinkbar.TextColor := FTextColor;
   FLinkbar.UseBkgndColor := chbUseBkgndColor.Checked;
-  FLinkbar.UseTextColor := chbUseTextColor.Checked;
+  FLinkbar.UseTextColor := chbTextColor.Checked;
 
   FLinkbar.GlowSize := nseGlowSize.Value;
 

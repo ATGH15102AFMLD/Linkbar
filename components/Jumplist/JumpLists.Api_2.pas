@@ -1,6 +1,6 @@
 {*******************************************************}
 {          Linkbar - Windows desktop toolbar            }
-{            Copyright (c) 2010-2018 Asaq               }
+{            Copyright (c) 2010-2021 Asaq               }
 {*******************************************************}
 
 // Port JumpLists.h and JumpLists.cpp from the Classic Shell 4.3.1 http://www.classicshell.net

@@ -64,7 +64,7 @@
         <VerInfo_Release>9</VerInfo_Release>
         <PostBuildEventCancelOnError>false</PostBuildEventCancelOnError>
         <Manifest_File>linkbar.exe.manifest</Manifest_File>
-        <VerInfo_Keys>CompanyName=linkbar@yandex.ru;FileDescription=Windows desktop toolbar;FileVersion=1.6.9.0;InternalName=Linkbar;LegalCopyright=linkbar@yandex.ru;LegalTrademarks=;OriginalFilename=Linkbar.exe;ProductName=Linkbar;ProductVersion=1.6.9;Comments=Powered by VCL Delphi XE3;PrivateBuild=Beta 5</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=linkbar@yandex.ru;FileDescription=Windows desktop toolbar;FileVersion=1.6.9.0;InternalName=Linkbar;LegalCopyright=linkbar@yandex.ru;LegalTrademarks=;OriginalFilename=Linkbar.exe;ProductName=Linkbar;ProductVersion=1.6.9;Comments=Powered by Delphi 10.3 Community Edition</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <DCC_Namespace>Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;System;Xml;Data;Datasnap;Web;Soap;Winapi;System.Win;$(DCC_Namespace)</DCC_Namespace>
@@ -80,7 +80,6 @@
         <DCC_E>false</DCC_E>
         <DCC_F>false</DCC_F>
         <SanitizedProjectName>Linkbar</SanitizedProjectName>
-        <VerInfo_Private>true</VerInfo_Private>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <Debugger_HostApplication>..\exe\Linkbar.exe</Debugger_HostApplication>
@@ -1033,7 +1032,7 @@ $(PostBuildEvent)]]></PostBuildEvent>
         <PreBuildEventIgnoreExitCode>False</PreBuildEventIgnoreExitCode>
         <PreLinkEvent/>
         <PreLinkEventIgnoreExitCode>False</PreLinkEventIgnoreExitCode>
-        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform).exe</PostBuildEvent>
+        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform).exe</PostBuildEvent>
         <PostBuildEventIgnoreExitCode>True</PostBuildEventIgnoreExitCode>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Release' And '$(Platform)'=='Win64'">
@@ -1041,7 +1040,7 @@ $(PostBuildEvent)]]></PostBuildEvent>
         <PreBuildEventIgnoreExitCode>False</PreBuildEventIgnoreExitCode>
         <PreLinkEvent/>
         <PreLinkEventIgnoreExitCode>False</PreLinkEventIgnoreExitCode>
-        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform).exe</PostBuildEvent>
+        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform).exe</PostBuildEvent>
         <PostBuildEventIgnoreExitCode>False</PostBuildEventIgnoreExitCode>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Debug' And '$(Platform)'=='Win32'">
@@ -1049,7 +1048,7 @@ $(PostBuildEvent)]]></PostBuildEvent>
         <PreBuildEventIgnoreExitCode>False</PreBuildEventIgnoreExitCode>
         <PreLinkEvent/>
         <PreLinkEventIgnoreExitCode>False</PreLinkEventIgnoreExitCode>
-        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform)D.exe</PostBuildEvent>
+        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform)D.exe</PostBuildEvent>
         <PostBuildEventIgnoreExitCode>True</PostBuildEventIgnoreExitCode>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Debug' And '$(Platform)'=='Win64'">
@@ -1057,7 +1056,7 @@ $(PostBuildEvent)]]></PostBuildEvent>
         <PreBuildEventIgnoreExitCode>False</PreBuildEventIgnoreExitCode>
         <PreLinkEvent/>
         <PreLinkEventIgnoreExitCode>False</PreLinkEventIgnoreExitCode>
-        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform)D.exe</PostBuildEvent>
+        <PostBuildEvent>copy $(OUTPUTPATH) $(OUTPUTDIR)$(OUTPUTNAME)$(Platform)D.exe</PostBuildEvent>
         <PostBuildEventIgnoreExitCode>True</PostBuildEventIgnoreExitCode>
     </PropertyGroup>
 </Project>

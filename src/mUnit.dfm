@@ -39,10 +39,10 @@ object LinkbarWcl: TLinkbarWcl
         GroupIndex = 3
         OnClick = imNewSeparatorClick
       end
-      object imAddBar: TMenuItem
+      object imNewLinkbar: TMenuItem
         Caption = 'Linkbar'
         GroupIndex = 3
-        OnClick = imAddBarClick
+        OnClick = imNewLinkbarClick
       end
     end
     object N2: TMenuItem
@@ -88,7 +88,7 @@ object LinkbarWcl: TLinkbarWcl
       Tag = 20
       Caption = 'Close'
       GroupIndex = 3
-      ShortCut = 32884
+      ShortCut = 32883
       OnClick = imCloseClick
     end
     object imCloseAll: TMenuItem

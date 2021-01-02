@@ -26,15 +26,16 @@ object FrmProperties: TFrmProperties
   PixelsPerInch = 96
   TextHeight = 14
   object pgc1: TPageControl
-    Left = 8
-    Top = 8
+    Left = 4
+    Top = 4
     Width = 401
     Height = 449
-    ActivePage = TabSheetItems
+    ActivePage = tsPanel
     Align = alCustom
     Anchors = [akLeft, akTop, akRight]
+    MultiLine = True
     TabOrder = 0
-    object TabSheetPanel: TTabSheet
+    object tsPanel: TTabSheet
       Caption = 'Panel'
       ImageIndex = 4
       DesignSize = (
@@ -326,9 +327,13 @@ object FrmProperties: TFrmProperties
         end
       end
     end
-    object TabSheetItems: TTabSheet
+    object tsItems: TTabSheet
       Caption = 'Items'
       ImageIndex = 5
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       DesignSize = (
         393
         420)
@@ -361,11 +366,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 51
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Icon size:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object nseIconSize: TnSpinEdit
           Left = 210
@@ -393,11 +397,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 153
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Margins (horizontal/vertical):'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object bvlSpacer2: TBevel
           Left = 289
@@ -482,11 +485,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 105
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Text width/indent:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object bvlSpacer3: TBevel
           Left = 289
@@ -531,7 +533,7 @@ object FrmProperties: TFrmProperties
         BevelOuter = bvNone
         ShowCaption = False
         TabOrder = 4
-        object chbUseTextColor: TCheckBox
+        object chbTextColor: TCheckBox
           Left = 0
           Top = 0
           Width = 187
@@ -565,15 +567,14 @@ object FrmProperties: TFrmProperties
         BevelOuter = bvNone
         ShowCaption = False
         TabOrder = 5
-        object lblGlowSize: TLabel
+        object lblTextGlowSize: TLabel
           Left = 0
           Top = 0
           Width = 54
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Glow size:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object nseGlowSize: TnSpinEdit
           Left = 210
@@ -601,11 +602,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 37
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Width:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object nseSeparatorWidth: TnSpinEdit
           Left = 210
@@ -649,7 +649,7 @@ object FrmProperties: TFrmProperties
           TabOrder = 0
           OnChange = Changed
           Items.Strings = (
-            'Bar'
+            'Line'
             'Spacer')
         end
       end
@@ -674,9 +674,13 @@ object FrmProperties: TFrmProperties
         end
       end
     end
-    object TabSheetAutoHide: TTabSheet
+    object tsAutoHide: TTabSheet
       Caption = 'Autohide'
       ImageIndex = 4
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       DesignSize = (
         393
         420)
@@ -701,12 +705,11 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 105
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Keyboard shortcut:'
           Transparent = True
           Layout = tlCenter
-          ExplicitHeight = 14
         end
       end
       object pnlDummy21: TPanel
@@ -722,11 +725,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 28
-          Height = 21
+          Height = 14
           Align = alLeft
           Caption = 'Hide:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object chbAutoHide: TCheckBox
           Left = 210
@@ -752,11 +754,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 104
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Corner gaps width:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object Bevel2: TBevel
           Left = 289
@@ -843,11 +844,10 @@ object FrmProperties: TFrmProperties
           Left = 0
           Top = 0
           Width = 56
-          Height = 22
+          Height = 14
           Align = alLeft
           Caption = 'Delay, ms:'
           Layout = tlCenter
-          ExplicitHeight = 14
         end
         object nseAutoShowDelay: TnSpinEdit
           Left = 210
@@ -877,6 +877,10 @@ object FrmProperties: TFrmProperties
     object tsAdditionally: TTabSheet
       Caption = 'Additional'
       ImageIndex = 1
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       DesignSize = (
         393
         420)
@@ -933,14 +937,12 @@ object FrmProperties: TFrmProperties
         object lblJumplistRecentMax: TLabel
           Left = 0
           Top = 0
-          Width = 293
-          Height = 33
+          Width = 58
+          Height = 14
           Align = alClient
           Caption = 'Max items:'
           Layout = tlCenter
           WordWrap = True
-          ExplicitWidth = 58
-          ExplicitHeight = 14
         end
         object Bevel1: TBevel
           Left = 293
@@ -979,6 +981,10 @@ object FrmProperties: TFrmProperties
     object tsAbout: TTabSheet
       Caption = 'About'
       ImageIndex = 1
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       DesignSize = (
         393
         420)
@@ -1005,7 +1011,7 @@ object FrmProperties: TFrmProperties
         Height = 14
         Caption = 'web:'
       end
-      object Label2: TLabel
+      object lblSystemInfo: TLabel
         Left = 8
         Top = 132
         Width = 68
