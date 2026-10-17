@@ -28,7 +28,7 @@ const
 implementation
 
 const
-  SCRATCH_QCM_FIRST = 20;
+  SCRATCH_QCM_FIRST = 2000;     // commands of Linkbar's own menu items are below this value
   SCRATCH_QCM_LAST = FCIDM_SHVIEWLAST;
 
 var

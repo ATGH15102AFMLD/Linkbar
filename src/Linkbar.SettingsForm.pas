@@ -578,8 +578,9 @@ begin
   nseTextOffset.Enabled := enabled;
   lblTextGlowSize.Enabled := enabled;
   nseGlowSize.Enabled := enabled;
-  chbTextColor.Enabled := enabled;
-  clbTextColor.Enabled := enabled and chbTextColor.Checked;
+  // Text color is used also by the drop-down of a group, so it is available even without text on the bar
+  chbTextColor.Enabled := True;
+  clbTextColor.Enabled := chbTextColor.Checked;
 
   // Check Hotkey
   //if ((Sender = edtHotKey) and (FLinkbar.HotkeyInfo <> edtHotKey.HotkeyInfo))

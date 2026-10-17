@@ -31,7 +31,10 @@ uses
   Linkbar.Graphics in 'Linkbar.Graphics.pas',
   Linkbar.Theme in 'Linkbar.Theme.pas',
   Linkbar.DarkTheme in 'Linkbar.DarkTheme.pas',
-  Linkbar.Settings in 'Linkbar.Settings.pas';
+  Linkbar.Settings in 'Linkbar.Settings.pas',
+  Linkbar.Group in 'Linkbar.Group.pas',
+  Linkbar.LinkCheck in 'Linkbar.LinkCheck.pas',
+  Linkbar.Convert in 'Linkbar.Convert.pas';
 
 {$R *.res}
 
@@ -43,11 +46,84 @@ begin
   Application.Run;
 end;
 
+procedure CollectBars(const AList: TStringList);
+
+var
+
+  dn: string;
+
+  files, dirs: TStringDynArray;
+
+  i: Integer;
+
+begin
+
+  AList.Clear;
+
+  // Find *.lbr in Application folder
+
+  dn := ExtractFilePath(ParamStr(0)) + DN_SHARED_BARS;
+
+  if DirectoryExists(dn)
+
+  then begin
+
+    files := TDirectory.GetFiles(dn, MASK_LBR, TSearchOption.soTopDirectoryOnly);
+
+    for i := Low(files) to High(files)
+
+    do AList.Add(files[i]);
+
+  end;
+
+
+
+  // Find local (portable) bars in Application folder: linkbars\<name>\bar.lbr
+
+  dn := ExtractFilePath(ParamStr(0)) + DN_LOCAL_BARS;
+
+  if DirectoryExists(dn)
+
+  then begin
+
+    dirs := TDirectory.GetDirectories(dn, '*', TSearchOption.soTopDirectoryOnly);
+
+    for i := Low(dirs) to High(dirs)
+
+    do if TFile.Exists(IncludeTrailingPathDelimiter(dirs[i]) + FN_LOCAL_BAR)
+
+       then AList.Add(IncludeTrailingPathDelimiter(dirs[i]) + FN_LOCAL_BAR);
+
+  end;
+
+
+
+  // Find *.lbr in Roaming folder
+
+  dn := GetLinkbarRoamingFolderPath + DN_USER_BARS;
+
+  if DirectoryExists(dn)
+
+  then begin
+
+    files := TDirectory.GetFiles(dn, MASK_LBR, TSearchOption.soTopDirectoryOnly);
+
+    for i := Low(files) to High(files)
+
+    do AList.Add(files[i]);
+
+  end;
+
+end;
+
+
+
 var dn, cmd: string;
-    files: TStringDynArray;
+    files, dirs: TStringDynArray;
     sl: TStringList;
     i, delay: Integer;
     CreatedPanels: Integer;
+    BarMutex: THandle;
 begin
 {$IFDEF DEBUG}
   ReportMemoryLeaksOnShutdown := True;
@@ -106,6 +182,12 @@ begin
       TFile.Delete(FSettingsFileName);
       Exit;
     end;
+    // Only one process per bar: a second start of the same bar file ends silently
+    BarMutex := CreateMutex(nil, False,
+      PChar('Local\Linkbar_' + StringReplace(LowerCase(ExpandFileName(FSettingsFileName)), '\', '/', [rfReplaceAll])));
+    if (BarMutex <> 0) and (GetLastError = ERROR_ALREADY_EXISTS)
+    then Exit;
+
     OleInitialize(nil);
     Application.Initialize;
     Application.MainFormOnTaskBar := True;
@@ -116,22 +198,20 @@ begin
   else begin
     sl := TStringList.Create;
     try
-      // Find *.lbr in Application folder
-      dn := ExtractFilePath(ParamStr(0)) + DN_SHARED_BARS;
-      if DirectoryExists(dn)
-      then begin
-        files := TDirectory.GetFiles(dn, MASK_LBR, TSearchOption.soTopDirectoryOnly);
-        for i := Low(files) to High(files)
-        do sl.Add(files[i]);
-      end;
+      CollectBars(sl);
 
-      // Find *.lbr in Roaming folder
-      dn := GetLinkbarRoamingFolderPath + DN_USER_BARS;
-      if DirectoryExists(dn)
+      // Old (not local) bars: offer the conversion to local (portable) bars
+      if (CountOldBars(sl) > 0)
       then begin
-        files := TDirectory.GetFiles(dn, MASK_LBR, TSearchOption.soTopDirectoryOnly);
-        for i := Low(files) to High(files)
-        do sl.Add(files[i]);
+        if (MessageDlg(
+              L10NFind('Convert.Question',
+                'Old linkbars were found (not portable).' + #13#10 +
+                'Convert them to portable linkbars in the folder "linkbars" and move the old ones to the Recycle Bin?' + #13#10#13#10 +
+                'Nalezeny stare linkbary (neprenosne).' + #13#10 +
+                'Prevest je na prenosne do slozky "linkbars" a stare presunout do kose?'),
+              mtConfirmation, [mbYes, mbNo], 0) = mrYes)
+           and (ConvertOldBars(sl) > 0)
+        then CollectBars(sl);
       end;
 
       CreatedPanels := 0;

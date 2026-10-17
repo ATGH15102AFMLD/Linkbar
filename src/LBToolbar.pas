@@ -13,15 +13,17 @@ interface
 
 uses
   Winapi.Windows, Winapi.ShlObj,
-  System.SysUtils, Vcl.Graphics, Generics.Collections;
+  System.SysUtils, Vcl.Graphics, Generics.Collections,
+  Linkbar.Consts;
 
 type
   TItemBase = class
   public type
-     TKind = (None, Shortcut, Separator);
-  private
+     TKind = (None, Shortcut, Separator, Group);
+  protected
     FKind: TKind;
     FBitmap: HBITMAP;                                                           // Shortcut icon
+  private
     Shield: Boolean;                                                            // Have shild overlay
     BitBucket: Boolean;                                                         // Is bitbucket
   public
@@ -31,6 +33,10 @@ type
     Rect: TRect;
     Hash: Cardinal;
     NeedLoad: Boolean;
+    Align: TItemAlign;                                                          // Own alignment (iaAuto = global)
+    Hidden: Boolean;                                                            // Does not fit in the bar (overflow), see the » menu
+    LinkState: TLinkState;                                                      // Result of the last link check
+    LinkCheckTick: UInt64;                                                      // When the last check was requested
   public
     property Kind: TKind read FKind;
     property Bitmap: HBITMAP read FBitmap;
@@ -72,6 +78,7 @@ type
     Button: TSize;
     Separator: Integer;
     Margin: Integer;
+    Overflow: Boolean;
   end;
 
   TLBItemList = class(TObjectList<TItemBase>)
@@ -82,11 +89,20 @@ type
 {$endif}
     FIconSize: Integer;
     FLineWidth: Integer;
+    FZonesActive: Boolean;
     procedure SetIconSize(const AValue: Integer);
     procedure QuickSort(L, R: Integer);
   public
     Lines: TList<Integer>;
     Sizes: TPanelSizes;
+    Boundaries: TList<TRect>;                                                   // Visible boundaries between alignment zones
+    OverflowRect: TRect;                                                        // Button "»" (empty when nothing is hidden)
+    HiddenCount: Integer;                                                       // Number of hidden items (without separators)
+  public
+    function ZoneOf(const AItem: TItemBase): TItemAlign;
+    procedure NormalizeZones;
+    procedure ZoneRange(const AZone: TItemAlign; out AFirst, ALast: Integer);
+    property ZonesActive: Boolean read FZonesActive;
   public
     constructor Create;
     destructor Destroy; override;
@@ -105,13 +121,16 @@ type
 
   function StrToHash(const AStr: string): Cardinal;
 
+  { Icon of the shell item (premultiplied 32 bit bitmap), caller owns the bitmap }
+  function LoadIconFromPidl(const APidl: PItemIDList; const AIconSize: Integer): HBITMAP;
+
 
 implementation
 
 uses
   Winapi.ActiveX, Winapi.ShellAPI, Winapi.KnownFolders,
   System.Win.ComObj, System.Types, System.Math,
-  Linkbar.OS, Linkbar.Consts, Linkbar.Shell, ExplorerMenu;
+  Linkbar.OS, Linkbar.Shell, ExplorerMenu;
 
 var FKnownFolderManager: IKnownFolderManager;
 
@@ -462,6 +481,8 @@ begin
   CoCreateInstance(CLSID_KnownFolderManager, nil, CLSCTX_ALL, IKnownFolderManager, FKnownFolderManager);
   Lines := TList<Integer>.Create;
   Lines.Capacity := 16;
+  Boundaries := TList<TRect>.Create;
+  FZonesActive := False;
 end;
 
 destructor TLBItemList.Destroy;
@@ -472,7 +493,64 @@ begin
 {$endif}
   FKnownFolderManager := nil;
   Lines.Free;
+  Boundaries.Free;
   inherited;
+end;
+
+{ Effective zone of the item: iaAuto follows the global option (old behavior:
+  only "Center" was honored, "Right" behaves like "Left") }
+function TLBItemList.ZoneOf(const AItem: TItemBase): TItemAlign;
+begin
+  Result := AItem.Align;
+  if (Result = iaAuto)
+  then begin
+    if (GlobalLayout = EPanelLayoutCenter)
+    then Result := iaCenter
+    else Result := iaStart;
+  end;
+end;
+
+{ Items of one zone must be neighbours in the list (start, center, end).
+  Stable insertion sort, does nothing when the list is already in order. }
+procedure TLBItemList.NormalizeZones;
+var j: Integer;
+begin
+  for var i := 1 to Self.Count-1
+  do begin
+    j := i;
+    while (j > 0)
+          and (Ord(ZoneOf(Self[j-1])) > Ord(ZoneOf(Self[j])))
+    do begin
+      Self.Exchange(j-1, j);
+      Dec(j);
+    end;
+  end;
+end;
+
+{ Index range of the zone. When items are wrapped to more lines, zones are
+  not used and the whole list is one zone. }
+procedure TLBItemList.ZoneRange(const AZone: TItemAlign; out AFirst, ALast: Integer);
+begin
+  AFirst := 0;
+  ALast := Self.Count-1;
+  if (not FZonesActive)
+  then Exit;
+
+  AFirst := ITEM_NONE;
+  for var i := 0 to Self.Count-1
+  do begin
+    if (ZoneOf(Self[i]) = AZone)
+    then begin
+      if (AFirst = ITEM_NONE)
+      then AFirst := i;
+      ALast := i;
+    end;
+  end;
+  if (AFirst = ITEM_NONE)
+  then begin
+    AFirst := 0;
+    ALast := Self.Count-1;
+  end;
 end;
 
 procedure TLBItemList.UpdateLines(const AVertical: Boolean; const AWidth, AHeight: Integer);
@@ -480,7 +558,31 @@ var
   count, x, y, margin: Integer;
   offset: TPoint;
   r: TRect;
+  z, prevZone: TItemAlign;
+  firstIdx, lastIdx: array[TItemAlign] of Integer;
+  offs: array[TItemAlign] of Integer;
+  total, bs, be, cs, target, startLimit, endLimit, gapS, gapE, mid: Integer;
+  need, endSum, used, cw: Integer;
+  full: Boolean;
+
+  function AxStart(const ARect: TRect): Integer;
+  begin
+    if AVertical then Result := ARect.Top else Result := ARect.Left;
+  end;
+
+  function AxEnd(const ARect: TRect): Integer;
+  begin
+    if AVertical then Result := ARect.Bottom else Result := ARect.Right;
+  end;
+
+  function AxLen(const ARect: TRect): Integer;
+  begin
+    if AVertical then Result := ARect.Height else Result := ARect.Width;
+  end;
+
 begin
+  NormalizeZones;
+
   // Set item width and height
   for var item in Self
   do begin
@@ -495,6 +597,47 @@ begin
   end;
 
   margin := Sizes.Margin;
+
+  // Overflow: one row/column only. Items that do not fit are hidden and listed
+  // in the menu of the button "»". The end zone and the button have priority.
+  OverflowRect := TRect.Empty;
+  HiddenCount := 0;
+  for var item in Self
+  do item.Hidden := False;
+
+  if Sizes.Overflow
+  then begin
+    if AVertical then total := AHeight else total := AWidth;
+    need := margin;
+    endSum := 0;
+    for var item in Self
+    do begin
+      need := need + AxLen(item.Rect);
+      if (ZoneOf(item) = iaEnd)
+      then endSum := endSum + AxLen(item.Rect);
+    end;
+
+    if (need > total)
+    then begin
+      if AVertical then cw := Sizes.Button.cy else cw := Sizes.Button.cx;
+      used := margin + endSum + cw;
+      full := False;
+      for var item in Self
+      do begin
+        if (ZoneOf(item) = iaEnd)
+        then Continue;
+        if (not full)
+           and (used + AxLen(item.Rect) <= total)
+        then used := used + AxLen(item.Rect)
+        else begin
+          full := True;
+          item.Hidden := True;
+          if (not IsSeparator(item))
+          then Inc(HiddenCount);
+        end;
+      end;
+    end;
+  end;
 
   if (AVertical)
   then begin
@@ -513,6 +656,13 @@ begin
   do begin
     Inc(count);
 
+    if Self[i].Hidden
+    then begin
+      // Move far away from the panel: not drawn, not hit by the mouse
+      Self[i].Rect.Offset(ITEM_HIDDEN_OFFSET, ITEM_HIDDEN_OFFSET);
+      Continue;
+    end;
+
     r := Self[i].Rect;
 
     // Calc item bounds
@@ -523,6 +673,7 @@ begin
     then begin
       Inc(y, r.Height);
       if (i < (Self.Count - 1))
+         and (not Sizes.Overflow)
          and ((y + Self[i+1].Rect.Height) > AHeight)
       then begin
         y := margin;
@@ -535,6 +686,7 @@ begin
     else begin
       Inc(x, r.Width);
       if (i < (Self.Count - 1))
+         and (not Sizes.Overflow)
          and ((x + Self[i+1].Rect.Width) > AWidth)
       then begin
         x := margin;
@@ -564,18 +716,107 @@ begin
     else FLineWidth := Self[Lines[0]-1].Rect.Right - Self[0].Rect.Left;
   end;
 
-  // Align items
-  if (GlobalLayout = EPanelLayoutCenter)
-     and (Lines.Count = 1)
-  then begin
-    offset := TPoint.Zero;
-    if (AVertical)
-    then offset.Y := ((AHeight - FLineWidth) div 2) - margin
-    else offset.X := ((AWidth  - FLineWidth) div 2) - margin;
+  // Align items to zones: start / center / end (only when all items are in
+  // one row/column). With only auto items it is the same as the old behavior.
+  FZonesActive := (Lines.Count = 1);
+  Boundaries.Clear;
 
-    for var item in Self
-    do item.Rect.Offset(offset);
-  end
+  if FZonesActive
+     and (Self.Count > 0)
+  then begin
+    if AVertical
+    then total := AHeight
+    else total := AWidth;
+
+    for z := Low(TItemAlign) to High(TItemAlign)
+    do begin
+      firstIdx[z] := ITEM_NONE;
+      lastIdx[z] := ITEM_NONE;
+      offs[z] := 0;
+    end;
+
+    for var i := 0 to Self.Count-1
+    do begin
+      if Self[i].Hidden
+      then Continue;
+      z := ZoneOf(Self[i]);
+      if (firstIdx[z] = ITEM_NONE)
+      then firstIdx[z] := i;
+      lastIdx[z] := i;
+    end;
+
+    // End zone sticks to the end edge (never moves back over the previous items)
+    if (firstIdx[iaEnd] <> ITEM_NONE)
+    then begin
+      bs := AxStart(Self[firstIdx[iaEnd]].Rect);
+      be := AxEnd(Self[lastIdx[iaEnd]].Rect);
+      offs[iaEnd] := Max(0, (total - margin - (be - bs)) - bs);
+      endLimit := bs + offs[iaEnd];
+    end
+    else endLimit := total - margin;
+
+    // Button "»" sits in front of the end zone
+    if (HiddenCount > 0)
+    then begin
+      if AVertical then cw := Sizes.Button.cy else cw := Sizes.Button.cx;
+      endLimit := endLimit - cw;
+      if AVertical
+      then OverflowRect := TRect.Create(0, endLimit, Sizes.Button.cx, endLimit + cw)
+      else OverflowRect := TRect.Create(endLimit, 0, endLimit + cw, Sizes.Button.cy);
+    end;
+
+    if (firstIdx[iaStart] <> ITEM_NONE)
+    then startLimit := AxEnd(Self[lastIdx[iaStart]].Rect)
+    else startLimit := margin;
+
+    // Center zone: in the middle of the bar, but never over the other zones
+    if (firstIdx[iaCenter] <> ITEM_NONE)
+    then begin
+      bs := AxStart(Self[firstIdx[iaCenter]].Rect);
+      be := AxEnd(Self[lastIdx[iaCenter]].Rect);
+      cs := be - bs;
+      target := (total - cs) div 2;
+      target := Min(target, endLimit - cs);
+      target := Max(target, startLimit);
+      offs[iaCenter] := target - bs;
+    end;
+
+    for var i := 0 to Self.Count-1
+    do begin
+      z := ZoneOf(Self[i]);
+      if (offs[z] <> 0)
+         and (not Self[i].Hidden)
+      then begin
+        if AVertical
+        then Self[i].Rect.Offset(0, offs[z])
+        else Self[i].Rect.Offset(offs[z], 0);
+      end;
+    end;
+
+    // Visible boundary between two used zones, but only when they are close
+    // to each other (less than one icon of free space between them)
+    if AVertical then cw := Sizes.Button.cy else cw := Sizes.Button.cx;
+    prevZone := iaAuto;
+    for z := iaStart to iaEnd
+    do begin
+      if (firstIdx[z] = ITEM_NONE)
+      then Continue;
+
+      if (prevZone <> iaAuto)
+      then begin
+        gapS := AxEnd(Self[lastIdx[prevZone]].Rect);
+        gapE := AxStart(Self[firstIdx[z]].Rect);
+        if (gapE - gapS < cw)
+        then begin
+          mid := (gapS + gapE) div 2 - Sizes.Separator div 2;
+          if AVertical
+          then Boundaries.Add(TRect.Create(0, mid, Sizes.Button.cx, mid + Sizes.Separator))
+          else Boundaries.Add(TRect.Create(mid, 0, mid + Sizes.Separator, Sizes.Button.cy));
+        end;
+      end;
+      prevZone := z;
+    end;
+  end;
 end;
 
 function TLBItemList.GetLineIndex(const AItemIndex: Integer): Integer;

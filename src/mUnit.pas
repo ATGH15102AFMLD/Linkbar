@@ -60,6 +60,29 @@ type
     procedure FormResize(Sender: TObject);
     procedure imNewSeparatorClick(Sender: TObject);
   private
+    imNewGroup: TMenuItem;                                                      // created in code, see L10n
+    imAlign: TMenuItem;                                                         // item alignment submenu, created in code
+    imOverflow: TMenuItem;                                                      // created in code
+    imLinkCheck: TMenuItem;                                                     // created in code
+    FOverflow: Boolean;
+    FLinkCheck: Boolean;
+    FLinkStartTimer: TTimer;                                                    // delayed first link check after the start
+    FLinkRedrawTimer: TTimer;                                                   // one redraw for a series of link check results
+    procedure LinkStartTimerTimer(Sender: TObject);
+    procedure LinkRedrawTimerTimer(Sender: TObject);
+    procedure imOverflowClick(Sender: TObject);
+    procedure imLinkCheckClick(Sender: TObject);
+    procedure DoOverflowMenu;
+    procedure DrawOverflowButton;
+    procedure DrawBadge(const ABitmap: THBitmap; const AItem: TItemBase; AX, AY: Integer);
+    procedure RequestLinkCheck(const AIndex: Integer; const AForce: Boolean = False);
+    procedure RequestAllLinkChecks;
+    procedure DoLinkChecked(const AHash: Cardinal; const AState: TLinkState);
+    procedure imAlignClick(Sender: TObject);
+    function ZoneDropIndex(const APt: TPoint; AIndex: Integer; out ADrawIndex, ADrawPart: Integer): Integer;
+    procedure imNewGroupClick(Sender: TObject);
+    procedure DoHoverGroup(const AIndex: Integer);
+  private
     BitmapSelected: THBitmap;
     BitmapDropPosition: THBitmap;
     BitmapButton: THBitmap;
@@ -270,13 +293,16 @@ implementation
 {$R *.dfm}
 
 uses
-  Types, Math, Dialogs, StrUtils, Themes,
+  Types, Math, Dialogs, StrUtils, Themes, System.Generics.Collections,
   Winapi.ShellAPI,
   ExplorerMenu, Linkbar.Shell, Linkbar.Theme,
   Linkbar.OS, Linkbar.L10n, JumpLists.Form, JumpLists.Api_2, RenameDialog,
-  Linkbar.SettingsForm, Linkbar.Settings;
+  Linkbar.SettingsForm, Linkbar.Settings, Linkbar.Group, Linkbar.LinkCheck;
 
 const
+  ALIGN_CAPTIONS: array[TItemAlign] of string = ('Default', 'Start', 'Center', 'End');
+  ALIGN_L10N_KEYS: array[TItemAlign] of string = ('Menu.AlignAuto', 'Menu.AlignStart', 'Menu.AlignCenter', 'Menu.AlignEnd');
+
   bf: TBlendFunction = (BlendOp: AC_SRC_OVER; BlendFlags: 0;
       SourceConstantAlpha: $FF; AlphaFormat: AC_SRC_ALPHA);
 
@@ -332,6 +358,7 @@ end;
 procedure TLinkbarWcl.GetOrCreateFilesList(const AFileName: string);
 var list: TStringList;
     templist: TStringList;
+    aligns: TList<TItemAlign>;
     sr: TSearchRec;
     i, j : integer;
     ext: string;
@@ -345,6 +372,32 @@ begin
   if FileExists(AFileName)
   then list.LoadFromFile(AFileName, TEncoding.UTF8);
 
+  // Alignment markers (>>start ...) -> parallel list of alignments
+  aligns := TList<TItemAlign>.Create;
+  begin
+    var cur := iaAuto;
+    i := 0;
+    while i < list.Count
+    do begin
+      var marker := False;
+      for var a := Low(TItemAlign) to High(TItemAlign)
+      do begin
+        if SameText(list[i], ALIGN_MARKERS[a])
+        then begin
+          cur := a;
+          marker := True;
+          Break;
+        end;
+      end;
+      if marker
+      then list.Delete(i)
+      else begin
+        aligns.Add(cur);
+        Inc(i);
+      end;
+    end;
+  end;
+
   templist := TStringList.Create;
   templist.CaseSensitive := False;
   templist.Sorted := False;
@@ -355,6 +408,19 @@ begin
     if ( FindFirst( WorkDir + '*' + ext, faAnyFile, sr) = 0 )
     then repeat
       templist.Add(sr.Name);
+    until (FindNext(sr) <> 0);
+    FindClose(sr);
+  end;
+
+  // Find groups in working directory: sub folders with group.ini
+  if ( FindFirst( WorkDir + '*', faDirectory, sr) = 0 )
+  then begin
+    repeat
+      if ((sr.Attr and faDirectory) <> 0)
+         and (sr.Name <> '.')
+         and (sr.Name <> '..')
+         and GroupIsFolder(WorkDir + sr.Name)
+      then templist.Add(sr.Name);
     until (FindNext(sr) <> 0);
     FindClose(sr);
   end;
@@ -374,30 +440,47 @@ begin
       templist.Delete(j);
       Inc(i);
     end
-    else list.Delete(i);
+    else begin
+      list.Delete(i);
+      aligns.Delete(i);
+    end;
   end;
 
   // New item move to end
   if (templist.Count > 0)
-  then list.AddStrings(templist);
+  then begin
+    for var k := 1 to templist.Count
+    do aligns.Add(iaAuto);
+    list.AddStrings(templist);
+  end;
   templist.Free;
 
   // Create linkbar items
   Items.Capacity := list.Count;
-  for var fileName in list do
+  for var k := 0 to list.Count-1 do
   begin
+    var fileName := list[k];
     if TItemSeparator.IsSeparator(fileName)
     then begin
-      Items.Add(TItemSeparator.Create);
+      var sep := TItemSeparator.Create;
+      sep.Align := aligns[k];
+      Items.Add(sep);
     end
     else begin
-      var item := TItemShortcut.Create;
+      var item: TItemShortcut;
+      if DirectoryExists(WorkDir + fileName)
+      then item := TItemGroup.Create
+      else item := TItemShortcut.Create;
       if item.LoadFromFile(WorkDir + fileName)
-      then Items.Add(item)
+      then begin
+        item.Align := aligns[k];
+        Items.Add(item);
+      end
       else item.Free;
     end;
   end;
   list.Free;
+  aligns.Free;
 
   if FSortAlphabetically
   then Items.Sort;
@@ -612,6 +695,7 @@ begin
   // Draw icon
   var d: Integer := IfThen(APressed, 1, 0);
   Items.Draw(ABitmap.Dc, item, r.Left + FIconOffset.X + d, r.Top + FIconOffset.Y + d);
+  DrawBadge(ABitmap, item, r.Left + FIconOffset.X + d, r.Top + FIconOffset.Y + d);
 end;
 
 procedure TLinkbarWcl.DrawItems(const AWidth, AHeight: integer);
@@ -619,10 +703,15 @@ begin
   Items.Sizes.Button := ButtonSize;
   Items.Sizes.Separator := SeparatorWidth;
   Items.Sizes.Margin := FGripSize;
+  Items.Sizes.Overflow := FOverflow;
   Items.UpdateLines(IsVertical(Align), AWidth, AHeight);
 
   // Draw captions
   DrawCaption(BitmapPanel, ITEM_ALL);
+
+  // Draw boundaries between alignment zones
+  for var b in Items.Boundaries
+  do ThemeDrawSeparator(BitmapPanel, Align, b);
 
   // Draw icons
   for var item in Items do
@@ -634,8 +723,12 @@ begin
     end
     else begin
       Items.Draw(BitmapPanel.Dc, item, item.Rect.Left + FIconOffset.X, item.Rect.Top + FIconOffset.Y);
+      DrawBadge(BitmapPanel, item, item.Rect.Left + FIconOffset.X, item.Rect.Top + FIconOffset.Y);
     end;
   end;
+
+  // Button "»" with the hidden items
+  DrawOverflowButton;
 end;
 
 procedure TLinkbarWcl.RecreateMainBitmap(const AWidth, AHeight: integer);
@@ -803,7 +896,11 @@ var settings: TSettingsFile;
 begin
   settings.Open(FSettingsFileName);
   // Read
-  WorkDir               := settings.Read(INI_DIR_LINKS, DEF_DIR_LINKS);
+  // Local (portable) bar keeps its links in the folder of its settings file,
+  // so it keeps working when the whole application folder is moved
+  if settings.Read(INI_LOCAL_BAR, False)
+  then WorkDir          := ExtractFilePath(ExpandFileName(FSettingsFileName))
+  else WorkDir          := settings.Read(INI_DIR_LINKS, DEF_DIR_LINKS);
   FAutoHide             := settings.Read(INI_AUTOHIDE, DEF_AUTOHIDE);
   FAutoHideTransparency := settings.Read(INI_AUTOHIDE_TRANSPARENCY, DEF_AUTOHIDE_TRANSPARENCY);
   FAutoShowDelay        := settings.Read(INI_AUTOSHOW_DELAY, DEF_AUTOSHOW_DELAY, 0, 60000);
@@ -826,6 +923,8 @@ begin
   FJumplistRecentMax    := settings.Read(INI_JUMPLIST_RECENTMAX, DEF_JUMPLIST_RECENTMAX, JUMPLIST_RECENTMAX_MIN, JUMPLIST_RECENTMAX_MAX);
   FJumplistShowMode     := settings.Read<TJumplistShowMode>(INI_JUMPLIST_SHOWMODE, DEF_JUMPLIST_SHOWMODE);
   FLockLinkbar          := settings.Read(INI_LOCK_BAR, DEF_LOCK_BAR);
+  FOverflow             := settings.Read(INI_OVERFLOW, False);
+  FLinkCheck            := settings.Read(INI_LINKCHECK, True);
   FTransparencyMode     := settings.Read<TTransparencyMode>(INI_TRANSPARENCYMODE, DEF_TRANSPARENCYMODE);
   FLook                 := settings.Read<TLook>(INI_COLORMODE, DEF_COLORMODE);
   FMonitorNum           := settings.Read(INI_MONITORNUM, Screen.PrimaryMonitor.MonitorNum, 0, Screen.MonitorCount-1);
@@ -869,8 +968,16 @@ begin
   then begin
     var sl := TStringList.Create;
     try
+      var cur := iaAuto;
       for var item in Items
-      do sl.Add(ExtractFileName(item.FileName));
+      do begin
+        if (item.Align <> cur)
+        then begin
+          cur := item.Align;
+          sl.Add(ALIGN_MARKERS[cur]);
+        end;
+        sl.Add(ExtractFileName(item.FileName));
+      end;
 
       sl.SaveToFile(WorkDir + LINKSLIST_FILE_NAME, TEncoding.UTF8);
     finally
@@ -904,6 +1011,8 @@ begin
     settings.Write(INI_ITEM_ORDER, Integer(ItemOrder));
     settings.Write(INI_ITEMS_ALIGN, Integer(Layout));
     settings.Write(INI_LOCK_BAR, FLockLinkbar);
+    settings.Write(INI_OVERFLOW, FOverflow);
+    settings.Write(INI_LINKCHECK, FLinkCheck);
     settings.Write(INI_ISLIGHT, FIsLightStyle);
     settings.Write(INI_ENABLE_AG, FEnableAeroGlass);
     settings.Write(INI_AUTOSHOW_DELAY, FAutoShowDelay);
@@ -993,6 +1102,18 @@ begin
 
   CreateLinkbarTasksJumplist;
 
+  // Event: bar started -> check all shortcuts in the background, but let the bar
+  // settle first (docking, icons) so the checks do not disturb the start
+  FLinkStartTimer := TTimer.Create(Self);
+  FLinkStartTimer.Enabled := False;
+  FLinkStartTimer.Interval := 3000;
+  FLinkStartTimer.OnTimer := LinkStartTimerTimer;
+  FLinkRedrawTimer := TTimer.Create(Self);
+  FLinkRedrawTimer.Enabled := False;
+  FLinkRedrawTimer.Interval := 250;
+  FLinkRedrawTimer.OnTimer := LinkRedrawTimerTimer;
+  FLinkStartTimer.Enabled := True;
+
   DoDelayedAutoHide(1000);
 end;
 
@@ -1001,6 +1122,48 @@ begin
   L10nControl(imNew,          'Menu.New');
   L10nControl(imNewShortcut,  'Menu.Shortcut');
   L10nControl(imNewSeparator, 'Menu.Separator');
+  // "Group" item of the New menu is created in code (the .dfm stays untouched)
+  if (imNewGroup = nil)
+  then begin
+    imNewGroup := TMenuItem.Create(Self);
+    imNewGroup.GroupIndex := imNewSeparator.GroupIndex;
+    imNewGroup.Caption := 'Group';
+    imNewGroup.OnClick := imNewGroupClick;
+    imNew.Insert(imNewSeparator.MenuIndex + 1, imNewGroup);
+  end;
+  L10nControl(imNewGroup,     'Menu.Group');
+  // Submenu "Align" (shown only for items), created in code
+  if (imAlign = nil)
+  then begin
+    imAlign := TMenuItem.Create(Self);
+    imAlign.Caption := 'Align';
+    for var a := Low(TItemAlign) to High(TItemAlign)
+    do begin
+      var sub := TMenuItem.Create(Self);
+      sub.Caption := ALIGN_CAPTIONS[a];
+      sub.Tag := Ord(a);
+      sub.OnClick := imAlignClick;
+      imAlign.Add(sub);
+      L10nControl(sub, ALIGN_L10N_KEYS[a]);
+    end;
+    pMenu.Items.Insert(imNew.MenuIndex + 1, imAlign);
+  end;
+  L10nControl(imAlign,        'Menu.Align');
+  // Switches in the bar menu, created in code
+  if (imOverflow = nil)
+  then begin
+    imOverflow := TMenuItem.Create(Self);
+    imOverflow.Caption := 'Overflow menu';
+    imOverflow.OnClick := imOverflowClick;
+    pMenu.Items.Insert(imSortAlphabet.MenuIndex + 1, imOverflow);
+
+    imLinkCheck := TMenuItem.Create(Self);
+    imLinkCheck.Caption := 'Check links';
+    imLinkCheck.OnClick := imLinkCheckClick;
+    pMenu.Items.Insert(imOverflow.MenuIndex + 1, imLinkCheck);
+  end;
+  L10nControl(imOverflow,     'Menu.Overflow');
+  L10nControl(imLinkCheck,    'Menu.LinkCheck');
   L10nControl(imNewLinkbar,   'Menu.Linkbar');
   L10nControl(imOpenWorkdir,  'Menu.Open');
   L10nControl(imRemoveBar,    'Menu.Delete');
@@ -1343,6 +1506,12 @@ begin
           // should be reset PressedIndex before
           PressedIndex := ITEM_NONE;
           DoClickItem(X, Y);
+        end
+        else if (not Items.OverflowRect.IsEmpty)
+                and PtInRect(Items.OverflowRect, FMousePosDown)
+                and PtInRect(Items.OverflowRect, Point(X, Y))
+        then begin // click on the button "»"
+          DoOverflowMenu;
         end;
         PressedIndex := ITEM_NONE;
       end
@@ -1510,9 +1679,22 @@ begin
   if (FPopupMenu = 0)
   then Exit;
 
+  // Current alignment of the item
+  if Assigned(imAlign)
+     and IsItemIndex(FItemPopup)
+  then begin
+    for var sub: TMenuItem in imAlign
+    do sub.Checked := (sub.Tag = Ord(Items[FItemPopup].Align));
+  end;
+
   //for i := 0 to pMenu.Items.Count-1 do
   for var item: TMenuItem in pMenu.Items
   do begin
+    // "Align" is only for items
+    if (item = imAlign)
+       and (not IsItemIndex(FItemPopup))
+    then Continue;
+
     if (AShift)
     then begin
       if item.Tag = 20 // Hide in extended menu
@@ -1537,6 +1719,14 @@ begin
        and (FSortAlphabetically)
     then Flags := Flags or MF_CHECKED;
 
+    if (item = imOverflow)
+       and (FOverflow)
+    then Flags := Flags or MF_CHECKED;
+
+    if (item = imLinkCheck)
+       and (FLinkCheck)
+    then Flags := Flags or MF_CHECKED;
+
     if (item.Count = 0)
     then begin
       caption := item.Caption;
@@ -1553,6 +1743,8 @@ begin
         if (subItem.IsLine)
         then Flags := Flags or MF_SEPARATOR
         else Flags := Flags or MF_STRING;
+        if (subItem.Checked)
+        then Flags := Flags or MF_CHECKED;
         AppendMenu(subMenu, Flags, subItem.Command, PChar(subItem.Caption));
       end;
 
@@ -1836,6 +2028,7 @@ begin
   then begin // restore pred selected item
     const r = Items[FHotIndex].Rect;
     BitBlt(BitmapPanel.Dc, r.Left, r.Top, r.Width, r.Height, BitmapSelected.Dc, 0, 0, SRCCOPY);
+    DrawBadge(BitmapPanel, Items[FHotIndex], r.Left + FIconOffset.X, r.Top + FIconOffset.Y);
   end;
 
   FHotIndex := AValue;
@@ -1848,12 +2041,16 @@ begin
 
   DrawItem(BitmapPanel, FHotIndex, True, False); // draw current selected item
 
+  // Event: the mouse is over the item -> check its target again (if the last check is old)
+  RequestLinkCheck(FHotIndex);
+
   UpdateWindow;
 
   // show hint
   if (TooltipShow)
      and (FHotIndex >= 0)
      and (not Items.IsSeparator(Items[FHotIndex]))
+     and (Items[FHotIndex].Kind <> TItemBase.TKind.Group)
   then begin
     const r = Items[FHotIndex].Rect;
     case Align of
@@ -1896,6 +2093,11 @@ begin
   else begin
     ToolTip.Cancel;
   end;
+
+  // Group: drop-down list of its shortcuts
+  if (FHotIndex >= 0)
+     and (Items[FHotIndex].Kind = TItemBase.TKind.Group)
+  then DoHoverGroup(FHotIndex);
 end;
 
 procedure TLinkbarWcl.SetHotkeyInfo(AValue: THotkeyInfo);
@@ -1966,6 +2168,7 @@ begin
   Items.Sizes.Button := ButtonSize;
   Items.Sizes.Separator := SeparatorWidth;
   Items.Sizes.Margin := FGripSize;
+  Items.Sizes.Overflow := FOverflow;
   Items.UpdateLines(AVertical, AWidth, AHeight);
 
   if (AVertical)
@@ -2015,6 +2218,7 @@ begin
   Items.Sizes.Button := ButtonSize;
   Items.Sizes.Separator := SeparatorWidth;
   Items.Sizes.Margin := FGripSize;
+  Items.Sizes.Overflow := FOverflow;
   Items.UpdateLines(IsVertical(Align), Width, Height);
 
   t := Top;
@@ -2246,6 +2450,12 @@ begin
         UpdateBitBuckets;
         Exit;
       end;
+    { Result of the background link check }
+    LM_LINKCHECK:
+      begin
+        DoLinkChecked(Cardinal(Msg.WParam), TLinkState(Msg.LParam));
+        Exit;
+      end;
     { Settings/Rename dialog destroyed }
     LM_DOAUTOHIDE:
       begin
@@ -2384,6 +2594,355 @@ begin
   then Items.Insert(FItemPopup, item)
   else Items.Add(item);
   UpdateWindowSize;
+end;
+
+procedure TLinkbarWcl.imOverflowClick(Sender: TObject);
+begin
+  FOverflow := not FOverflow;
+  TSettingsFile.Write(FSettingsFileName, INI_OVERFLOW, FOverflow);
+  UpdateWindowSize;
+end;
+
+procedure TLinkbarWcl.imLinkCheckClick(Sender: TObject);
+begin
+  FLinkCheck := not FLinkCheck;
+  TSettingsFile.Write(FSettingsFileName, INI_LINKCHECK, FLinkCheck);
+
+  if FLinkCheck
+  then RequestAllLinkChecks
+  else begin
+    // Remove all badges
+    for var item in Items
+    do begin
+      item.LinkState := lsUnknown;
+      item.LinkCheckTick := 0;
+    end;
+    RecreateMainBitmap(BitmapPanel.Width, BitmapPanel.Height);
+    UpdateWindow;
+  end;
+end;
+
+{ Menu with the items that do not fit in the bar }
+procedure TLinkbarWcl.DoOverflowMenu;
+var
+  menu: HMENU;
+  r: TRect;
+  pt: TPoint;
+  flags: UINT;
+  cmd: Integer;
+begin
+  menu := CreatePopupMenu;
+  if (menu = 0)
+  then Exit;
+
+  for var i := 0 to Items.Count-1
+  do begin
+    if Items[i].Hidden
+       and (not Items.IsSeparator(Items[i]))
+    then AppendMenu(menu, MF_STRING, 1000 + i, PChar(StringReplace(Items[i].Caption, '&', '&&', [rfReplaceAll])));
+  end;
+
+  r := Items.OverflowRect;
+  flags := TPM_RETURNCMD or TPM_NONOTIFY or TPM_LEFTBUTTON;
+  case Align of
+    EPanelAlignLeft:   pt := Point(r.Right, r.Top);
+    EPanelAlignRight:
+      begin
+        pt := Point(r.Left, r.Top);
+        flags := flags or TPM_RIGHTALIGN;
+      end;
+    EPanelAlignBottom:
+      begin
+        pt := Point(r.Left, r.Top);
+        flags := flags or TPM_BOTTOMALIGN;
+      end;
+    else pt := Point(r.Left, r.Bottom);
+  end;
+  MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
+
+  cmd := 0;
+  FLockHotIndex := True;
+  FLockAutoHide := True;
+  try
+    ToolTip.Cancel;
+    cmd := Integer(TrackPopupMenuEx(menu, flags, pt.X, pt.Y, Handle, nil));
+  finally
+    DestroyMenu(menu);
+    FLockHotIndex := False;
+    if (WindowFromPoint(MakePoint(GetMessagePos)) <> Handle)
+    then HotIndex := ITEM_NONE;
+    FLockAutoHide := False;
+  end;
+
+  if (cmd >= 1000)
+  then DoExecuteItem(cmd - 1000);
+end;
+
+procedure TLinkbarWcl.DrawOverflowButton;
+var
+  r: TRect;
+  textColor: TColor;
+  fnt0: HGDIOBJ;
+begin
+  r := Items.OverflowRect;
+  if r.IsEmpty
+  then Exit;
+
+  if (FUseTextColor)
+  then textColor := FTextColor
+  else textColor := ThemeButtonNormalTextColor;
+
+  fnt0 := SelectObject(BitmapPanel.Dc, Screen.IconFont.Handle);
+  DrawGlassText(BitmapPanel.Dc, #$00BB, r, DT_CENTER or DT_VCENTER or DT_SINGLELINE or DT_NOPREFIX, FGlowSize, textColor);
+  SelectObject(BitmapPanel.Dc, fnt0);
+end;
+
+{ Small colored circle in the top right corner of the icon:
+  red = target missing, orange = server/drive does not answer }
+procedure TLinkbarWcl.DrawBadge(const ABitmap: THBitmap; const AItem: TItemBase; AX, AY: Integer);
+begin
+  if not (AItem.LinkState in [lsMissing, lsUnreachable])
+  then Exit;
+
+  const size = Max(8, Items.IconSize div 3);
+  const x = AX + Items.IconSize - size;
+  const y = AY;
+
+  var gpDrawer: IGPGraphics := TGpGraphics.Create(ABitmap.Dc);
+  gpDrawer.SmoothingMode := SmoothingModeAntiAlias;
+  var gpBrush: IGPSolidBrush := TGPSolidBrush.Create(TGPColor.Create($ffffffff));
+  gpDrawer.FillEllipse(gpBrush, x - 1, y - 1, size + 2, size + 2);
+  if (AItem.LinkState = lsMissing)
+  then gpBrush.Color := TGPColor.Create($ffe53935)
+  else gpBrush.Color := TGPColor.Create($fffb8c00);
+  gpDrawer.FillEllipse(gpBrush, x, y, size, size);
+end;
+
+procedure TLinkbarWcl.RequestLinkCheck(const AIndex: Integer; const AForce: Boolean);
+begin
+  if (not FLinkCheck)
+     or (not IsItemIndex(AIndex))
+  then Exit;
+
+  const item = Items[AIndex];
+  if (item.Kind <> TItemBase.TKind.Shortcut)
+  then Exit;
+
+  if (not AForce)
+     and (item.LinkCheckTick <> 0)
+     and ((GetTickCount64 - item.LinkCheckTick) < LINK_RECHECK_MS)
+  then Exit;
+
+  item.LinkCheckTick := GetTickCount64;
+  LinkCheckRequest(Handle, item.Hash, item.FileName);
+end;
+
+procedure TLinkbarWcl.RequestAllLinkChecks;
+begin
+  for var i := 0 to Items.Count-1
+  do RequestLinkCheck(i, True);
+end;
+
+procedure TLinkbarWcl.LinkStartTimerTimer(Sender: TObject);
+begin
+  FLinkStartTimer.Enabled := False;
+  RequestAllLinkChecks;
+end;
+
+{ Results come in a series. The bar is redrawn once for the whole series. }
+procedure TLinkbarWcl.LinkRedrawTimerTimer(Sender: TObject);
+begin
+  FLinkRedrawTimer.Enabled := False;
+
+  // Do not disturb dragging, try again later
+  if FDragingItem or FMouseDragItem or FMouseDragLinkbar or (FItemDropPosition <> ITEM_NONE)
+  then begin
+    FLinkRedrawTimer.Enabled := True;
+    Exit;
+  end;
+
+  RecreateMainBitmap(BitmapPanel.Width, BitmapPanel.Height);
+  if IsItemIndex(FHotIndex)
+  then begin
+    const r = Items[FHotIndex].Rect;
+    BitBlt(BitmapSelected.Dc, 0, 0, r.Width, r.Height, BitmapPanel.Dc, r.Left, r.Top, SRCCOPY);
+    DrawItem(BitmapPanel, FHotIndex, True, False);
+  end;
+  UpdateWindow;
+end;
+
+procedure TLinkbarWcl.DoLinkChecked(const AHash: Cardinal; const AState: TLinkState);
+var oldBad, newBad: Boolean;
+begin
+  for var i := 0 to Items.Count-1
+  do begin
+    if (Items[i].Hash = AHash)
+    then begin
+      if (Items[i].LinkState <> AState)
+      then begin
+        // The badge is drawn only for a broken link. Unknown -> Ok changes nothing visible.
+        oldBad := Items[i].LinkState in [lsMissing, lsUnreachable];
+        newBad := AState in [lsMissing, lsUnreachable];
+        const visible = oldBad or newBad;
+        Items[i].LinkState := AState;
+        if visible and Assigned(FLinkRedrawTimer)
+        then begin
+          FLinkRedrawTimer.Enabled := False;
+          FLinkRedrawTimer.Enabled := True;
+        end;
+      end;
+      Break;
+    end;
+  end;
+end;
+
+{ Set own alignment of the popup item; item moves to its zone }
+procedure TLinkbarWcl.imAlignClick(Sender: TObject);
+begin
+  if not IsItemIndex(FItemPopup)
+  then Exit;
+
+  Items[FItemPopup].Align := TItemAlign((Sender as TMenuItem).Tag);
+  SortAlphabetically := False;
+  Items.NormalizeZones;
+  SaveLinks;
+  UpdateWindowSize;
+end;
+
+{ Insertion index for dragging an item: only inside the zone of the dragged item.
+  Result = index before which the item is inserted (ITEM_NONE = out of the bar). }
+function TLinkbarWcl.ZoneDropIndex(const APt: TPoint; AIndex: Integer; out ADrawIndex, ADrawPart: Integer): Integer;
+var
+  zf, zl, c, cf, cl: Integer;
+  vert: Boolean;
+begin
+  Result := ITEM_NONE;
+  ADrawIndex := ITEM_NONE;
+  ADrawPart := -1;
+
+  if (FDragIndex < 0)
+     or (FDragIndex >= Items.Count)
+     or (not Rect(0, 0, Width, Height).Contains(APt))
+  then Exit;
+
+  vert := IsVertical(Align);
+  Items.ZoneRange(Items.ZoneOf(Items[FDragIndex]), zf, zl);
+
+  if vert then c := APt.Y else c := APt.X;
+
+  if (AIndex <> ITEM_NONE)
+  then begin
+    if vert then cf := Items[AIndex].Rect.CenterPoint.Y else cf := Items[AIndex].Rect.CenterPoint.X;
+    if (c < cf)
+    then Result := AIndex
+    else Result := AIndex + 1;
+  end
+  else begin
+    // Cursor is in a gap: nearest end of the zone
+    if vert then cf := Items[zf].Rect.CenterPoint.Y else cf := Items[zf].Rect.CenterPoint.X;
+    if vert then cl := Items[zl].Rect.CenterPoint.Y else cl := Items[zl].Rect.CenterPoint.X;
+    if (c < cf)
+    then Result := zf
+    else if (c > cl)
+         then Result := zl + 1
+         else Result := ITEM_NONE;
+    if (Result = ITEM_NONE)
+    then Exit;
+  end;
+
+  Result := EnsureRange(Result, zf, zl + 1);
+
+  if (Result > zl)
+  then begin
+    ADrawIndex := zl;
+    ADrawPart := 1;
+  end
+  else begin
+    ADrawIndex := Result;
+    ADrawPart := -1;
+  end;
+end;
+
+{ New group = sub folder of the working directory with the marker file group.ini }
+procedure TLinkbarWcl.imNewGroupClick(Sender: TObject);
+var
+  folder: string;
+  item: TItemGroup;
+begin
+  folder := GroupCreate(WorkDir, L10NFind('Group.Name', 'Group'));
+  if (folder = '')
+  then Exit;
+
+  item := TItemGroup.Create;
+  item.Hash := StrToHash(ExtractFileName(folder));
+  item.FileName := folder;
+  item.NeedLoad := True;
+  if (FItemPopup <> ITEM_NONE)
+  then Items.Insert(FItemPopup, item)
+  else Items.Add(item);
+
+  tmrUpdate.Enabled := True;
+end;
+
+{ The group item became hot: open its drop-down list (after a short delay) }
+procedure TLinkbarWcl.DoHoverGroup(const AIndex: Integer);
+var
+  rItem, rBar: TRect;
+  pt: TPoint;
+  dir: TGroupPopupDir;
+  style: TGroupStyle;
+  glow: Integer;
+  bg: Cardinal;
+  lum: Integer;
+  lightText: Boolean;
+begin
+  if not IsItemIndex(AIndex)
+  then Exit;
+
+  rItem := Items[AIndex].Rect;
+  pt := rItem.TopLeft;
+  MapWindowPoints(Handle, HWND_DESKTOP, pt, 1);
+  rItem := TRect.Create(pt, rItem.Width, rItem.Height);
+  GetWindowRect(Handle, rBar);
+
+  case Align of
+    EPanelAlignLeft:   dir := gpdRight;
+    EPanelAlignRight:  dir := gpdLeft;
+    EPanelAlignBottom: dir := gpdUp;
+    else dir := gpdDown;
+  end;
+
+  // The drop-down copies the look of this linkbar
+  glow := FGlowSize;
+  style.Align := Align;
+  style.IsLight := IsLightStyle;
+  style.Transparency := FTransparencyMode;
+  style.BgColor := BackgroundColor;
+  style.UseTextColor := FUseTextColor;
+  style.TextColor := TColor(FTextColor);
+  if (not FUseTextColor) and IsWindows10
+  then begin
+    // Text color by the style of the bar: Dark = light text, Light = dark text,
+    // Accent/Custom = by brightness of the background color (format $AABBGGRR)
+    bg := BackgroundColor;
+    lum := (299 * Integer(bg and $FF) + 587 * Integer((bg shr 8) and $FF) + 114 * Integer((bg shr 16) and $FF)) div 1000;
+    case FLook of
+      ELookDark:  lightText := True;
+      ELookLight: lightText := False;
+      else lightText := (lum < 140);
+    end;
+    style.UseTextColor := True;
+    if lightText
+    then style.TextColor := TColor($00F2F2F2)
+    else style.TextColor := TColor($00202020);
+  end;
+  style.DrawText :=
+    procedure(ADc: HDC; AText: string; ARect: TRect; AFlags: Cardinal; AColor: TColor)
+    begin
+      DrawGlassText(ADc, AText, ARect, AFlags, glow, AColor);
+    end;
+
+  GroupHover(Handle, Items[AIndex].FileName, rItem, rBar, dir, style);
 end;
 
 procedure TLinkbarWcl.imOpenWorkdirClick(Sender: TObject);
@@ -2569,22 +3128,31 @@ var
   r: TRect;
   index: Integer;
   part: Integer;
+  drawIndex: Integer;
 begin
   index := ItemIndexByPoint(AValue);
 
-  if (index = ITEM_NONE)
-  then part := -1
+  if FDragingItem
+  then begin
+    // Moving an item: only inside its alignment zone
+    index := ZoneDropIndex(AValue, index, drawIndex, part);
+  end
   else begin
-    part := Items[index].GetDropPart(AValue, IsVertical(Align), FDragingItem);
+    if (index = ITEM_NONE)
+    then part := -1
+    else begin
+      part := Items[index].GetDropPart(AValue, IsVertical(Align), FDragingItem);
 
-    if (part = 1) and (index <> FDragIndex)
-    then begin
-      index := index + 1;
-      part := -1;
+      if (part = 1) and (index <> FDragIndex)
+      then begin
+        index := index + 1;
+        part := -1;
+      end;
+
+      if index > (Items.Count-1)
+      then index := ITEM_NONE;
     end;
-
-    if index > (Items.Count-1)
-    then index := ITEM_NONE;
+    drawIndex := index;
   end;
 
   if FDragingItem or (index = ITEM_NONE) or (part <> 0)
@@ -2604,7 +3172,7 @@ begin
 
   if (FItemDropPosition <> ITEM_NONE) then
   begin
-    r := GetItemDropRect(FItemDropPosition, part);
+    r := GetItemDropRect(drawIndex, part);
     _FLastDropRect := r;
 
     BitBlt(BitmapDropPosition.Dc, 0, 0, r.Width, r.Height, BitmapPanel.Dc, r.Left, r.Top, SRCCOPY);
@@ -2667,14 +3235,9 @@ begin
   if FDragingItem
   then begin
     SortAlphabetically := False;
-    if (FItemDropPosition = ITEM_NONE)
+    // FItemDropPosition is already limited to the zone of the dragged item
+    if (FItemDropPosition <> ITEM_NONE)
     then begin
-      if (Items.Count > 0)
-         and ((Items.First.Rect.TopLeft.X < pt.X) or (Items.First.Rect.TopLeft.Y < pt.Y))
-      then Items.Move(FDragIndex, 0)
-      else Items.Move(FDragIndex, Items.Count-1);
-    end
-    else begin
       if (FItemDropPosition <= FDragIndex)
       then Items.Move(FDragIndex, FItemDropPosition)
       else Items.Move(FDragIndex, FItemDropPosition-1);
@@ -2721,24 +3284,36 @@ procedure TLinkbarWcl.DirWatchChange(const Sender: TObject; const AAction: TWatc
 var ext: string;
     hash: Cardinal;
     index: integer;
+    isGroup: Boolean;
 begin
   inherited;
-  // Skip unsupported files
+  // Skip unsupported files. Group is a folder with the marker file group.ini
   ext := ExtractFileExt(AFileName);
-  if not MatchText(ext, ES_ARRAY) then Exit;
+  index := FindItemByHash(StrToHash(AFileName));
+  isGroup := ((index <> ITEM_NONE) and (Items[index].Kind = TItemBase.TKind.Group))
+             or GroupIsFolder(WorkDir + AFileName);
+  if (not isGroup) and (not MatchText(ext, ES_ARRAY)) then Exit;
 
   tmrUpdate.Enabled := False;
 
   case AAction of
   waAdded:
   begin
-    var item := TItemShortcut.Create;
-    item.Hash := StrToHash(AFileName);
-    item.FileName := WorkDir + AFileName;
-    item.NeedLoad := True;
-    if (FItemDropPosition = ITEM_NONE)
-    then Items.Add(item)
-    else Items.Insert(FItemDropPosition, item);
+    // A group created by the linkbar itself is already in the list
+    if (not isGroup)
+       or (FindItemByHash(StrToHash(AFileName)) = ITEM_NONE)
+    then begin
+      var item: TItemShortcut;
+      if isGroup
+      then item := TItemGroup.Create
+      else item := TItemShortcut.Create;
+      item.Hash := StrToHash(AFileName);
+      item.FileName := WorkDir + AFileName;
+      item.NeedLoad := True;
+      if (FItemDropPosition = ITEM_NONE)
+      then Items.Add(item)
+      else Items.Insert(FItemDropPosition, item);
+    end;
   end;
   waRemoved:
   begin
@@ -2787,7 +3362,10 @@ begin
     if item.NeedLoad
     then begin
       if item.LoadFromFile(item.FileName)
-      then Items.LoadIcon(item)
+      then begin
+        Items.LoadIcon(item);
+        RequestLinkCheck(i, True);
+      end
       else DeleteItem(i);
     end
   end;

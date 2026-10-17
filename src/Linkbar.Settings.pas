@@ -36,12 +36,16 @@ implementation
 
 uses System.SysUtils, System.TypInfo, System.Variants, System.Math;
 
-{ Return True if <FileName> is valid = Working direcrory exists }
+{ Return True if <FileName> is valid = Working direcrory exists.
+  Local (portable) bar uses the folder of its settings file as the working
+  directory, so it is always valid and is never deleted because of a path }
 class function TSettingsFile.IsValid(const FileName: string): Boolean;
 var s: TSettingsFile;
 begin
   s.Open(FileName);
-  Result := DirectoryExists( s.Read(INI_DIR_LINKS, DEF_DIR_LINKS) );
+  if s.Read(INI_LOCAL_BAR, False)
+  then Result := True
+  else Result := DirectoryExists( s.Read(INI_DIR_LINKS, DEF_DIR_LINKS) );
   s.Close;
 end;
 

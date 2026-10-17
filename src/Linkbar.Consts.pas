@@ -18,6 +18,12 @@ type
 
   TPanelLayout = (EPanelLayoutLeft, EPanelLayoutCenter, EPanelLayoutRight);
 
+  { Alignment of a single item: iaAuto = follow the global option "Align (single row)" }
+  TItemAlign = (iaAuto, iaStart, iaCenter, iaEnd);
+
+  { Result of the background link check (see Linkbar.LinkCheck) }
+  TLinkState = (lsUnknown, lsOk, lsMissing, lsUnreachable);
+
   TTextLayout = (ETextLayoutNone, ETextLayoutLeft, ETextLayoutTop, ETextLayoutRight, ETextLayoutBottom);
 
   TAutoShowMode = (EAutoShowModeMouseHover, EAutoShowModeMouseClickLeft, EAutoShowModeMouseClickRight);
@@ -33,6 +39,10 @@ type
 const
 
   LM_DOAUTOHIDE = WM_USER + 66;
+  LM_LINKCHECK  = WM_USER + 70;                                                 { Link check result: WParam = item hash, LParam = TLinkState }
+
+  LINK_RECHECK_MS = 60000;                                                      { Min. time between two checks of one item }
+  ITEM_HIDDEN_OFFSET = -30000;                                                  { Hidden (overflow) items are moved out of the panel }
 
   APP_ID_LINKBAR  = '991E87F9787C468E8594072D75A476C7';
   APP_NAME_LINKBAR = 'Linkbar';
@@ -52,6 +62,9 @@ const
 
   DN_SHARED_BARS = 'Shared bars\';
   DN_USER_BARS = 'User bars\';
+  DN_ICONS = 'icons\';                                                         { Own group icons (.ico), next to the application }
+  DN_LOCAL_BARS = 'linkbars\';                                                 { Local (portable) bars: <app folder>\linkbars\<name>\ }
+  FN_LOCAL_BAR = 'bar.lbr';                                                     { Settings file of a local bar, lives in the bar folder }
   DN_LOCALES = 'Locales\';
   EXT_LBR = '.lbr';
   MASK_LBR = '*' + EXT_LBR;
@@ -139,6 +152,9 @@ const
   INI_AUTOHIDE_SHOWMODE         = 'autohideshowmode';
   INI_AUTOHIDE_HOTKEY           = 'autohidehotkey';
   INI_DIR_LINKS                 = 'dirlinks';
+  INI_OVERFLOW                  = 'overflow';                                   { Items that do not fit go to the » menu }
+  INI_LINKCHECK                 = 'linkcheck';                                  { Background check of shortcut targets }
+  INI_LOCAL_BAR                 = 'local';                                      { Local bar: working directory is the folder of the settings file }
   INI_ITEMS_ALIGN               = 'itemsalign';
   INI_EDGE                      = 'Edge';
   INI_TOOLTIP_SHOW              = 'tooltipshow';
@@ -171,6 +187,10 @@ const
   INI_SEPARATOR_STYLE           = 'separatorstyle';
 
   LINKSLIST_FILE_NAME  = 'list';
+
+  { Markers in the file 'list': every following item has this alignment (until next marker).
+    No marker = iaAuto, so files of older versions work unchanged. }
+  ALIGN_MARKERS: array[TItemAlign] of string = ('>>auto', '>>start', '>>center', '>>end');
 
 var
   GlobalLayout:           TPanelLayout = DEF_ITEMS_ALIGN;

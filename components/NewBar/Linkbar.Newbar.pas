@@ -22,6 +22,7 @@ type
     edtWorkDir: TEdit;
     btnCreate: TButton;
     Label1: TLabel;
+    rbLocalDir: TRadioButton;
     rbAppDir: TRadioButton;
     rbUserDir: TRadioButton;
     Panel1: TPanel;
@@ -31,11 +32,20 @@ type
     procedure Button1Click(Sender: TObject);
     procedure btnCreateClick(Sender: TObject);
     procedure btnCancelClick(Sender: TObject);
+    procedure rbModeClick(Sender: TObject);
+    procedure edtWorkDirChange(Sender: TObject);
   private
     FName: string;
     InitiatedUserDir: string;
     InitiatedAppDir: string;
+    InitiatedLocalDir: string;
     FWorkinDirectoryPath: string;
+    FLocalName: string;                                                         // Name (= folder) of the local bar
+    FCaptionName: string;
+    FCaptionFolder: string;
+    FUpdating: Boolean;
+    function GetDefaultLocalName: string;
+    procedure UpdateMode;
     procedure UpdateThemeStyle;
     function ScaleDimension(const X: Integer): Integer;
     procedure L10n;
@@ -81,6 +91,20 @@ begin
 {$endif}
 end;
 
+{ Name of a local bar is used as a folder name }
+function IsValidBarName(const AName: string): Boolean;
+const BAD_CHARS = '\/:*?"<>|';
+var i: Integer;
+begin
+  Result := (AName <> '')
+            and (Length(AName) <= 100)
+            and (AName[Length(AName)] <> '.');
+  if not Result then Exit;
+  for i := 1 to Length(AName) do
+    if (Pos(AName[i], BAD_CHARS) > 0) or (AName[i] < ' ')
+    then Exit(False);
+end;
+
 function TBarCreatorWCl.ScaleDimension(const X: Integer): Integer;
 begin
   Result := MulDiv(X, Self.PixelsPerInch, 96);
@@ -94,8 +118,26 @@ end;
 procedure TBarCreatorWCl.btnCreateClick(Sender: TObject);
 var
   ini: TIniFile;
-  filename, cmd: string;
+  filename, cmd, barDir: string;
 begin
+  if rbLocalDir.Checked
+  then begin
+    // Portable bar: <application folder>\linkbars\<name>\bar.lbr
+    barDir := InitiatedLocalDir + Trim(edtWorkDir.Text) + PathDelim;
+    filename := barDir + FN_LOCAL_BAR;
+    if FileExists(filename)
+    then begin
+      MessageDlg(L10NFind('New.Exists', 'A linkbar with this name already exists.'),
+        mtWarning, [mbOK], 0);
+      Exit;
+    end;
+    if not ForceDirectories(barDir)
+    then begin
+      MessageDlg(Format(L10NFind('New.CreateFailed', 'Cannot create the folder: %s'), [barDir]),
+        mtError, [mbOK], 0);
+      Exit;
+    end;
+  end;
   if rbAppDir.Checked
   then begin
     ForceDirectories(InitiatedAppDir);
@@ -108,7 +150,9 @@ begin
   end;
 
   ini := TIniFile.Create(filename);
-  ini.WriteString(INI_SECTION_MAIN, INI_DIR_LINKS, FWorkinDirectoryPath);
+  if rbLocalDir.Checked
+  then ini.WriteBool(INI_SECTION_MAIN, INI_LOCAL_BAR, True)
+  else ini.WriteString(INI_SECTION_MAIN, INI_DIR_LINKS, FWorkinDirectoryPath);
   ini.Free;
 
   cmd := LBCreateCommandParam(CLK_FILE, filename);
@@ -123,9 +167,13 @@ procedure TBarCreatorWCl.L10n;
 begin
   L10nControl(Self,       'New.Caption');
   L10nControl(Label1,     'New.ToWhom');
+  L10nControl(rbLocalDir, 'New.Local');
   L10nControl(rbAppDir,   'New.ForAll');
   L10nControl(rbUserDir,  'New.ForMe');
   L10nControl(lblWorkDir, 'New.Folder');
+  // Label above the edit box has two meanings: folder (all/me) or name (local)
+  FCaptionFolder := lblWorkDir.Caption;
+  FCaptionName := L10NFind('New.Name', 'Name of the linkbar:');
   L10nControl(btnCreate,  'New.Create');
   L10nControl(btnCancel,  'Button.Cancel');
 end;
@@ -138,6 +186,62 @@ begin
     edtWorkDir.Text := FWorkinDirectoryPath;
     btnCreate.Enabled := True;
   end;
+end;
+
+{ First free name: Linkbar, Linkbar 2, Linkbar 3, ... }
+function TBarCreatorWCl.GetDefaultLocalName: string;
+var i: Integer;
+begin
+  Result := 'Linkbar';
+  i := 1;
+  while FileExists(InitiatedLocalDir + Result + PathDelim + FN_LOCAL_BAR)
+  do begin
+    Inc(i);
+    Result := 'Linkbar ' + IntToStr(i);
+  end;
+end;
+
+{ Switch between local bar (name) and all users / only me (folder) }
+procedure TBarCreatorWCl.UpdateMode;
+begin
+  FUpdating := True;
+  try
+    if rbLocalDir.Checked
+    then begin
+      lblWorkDir.Caption := FCaptionName;
+      edtWorkDir.Enabled := True;
+      edtWorkDir.ReadOnly := False;
+      edtWorkDir.TabStop := True;
+      edtWorkDir.Color := clWindow;
+      edtWorkDir.Text := FLocalName;
+      btnSetWorkDir.Visible := False;
+      btnCreate.Enabled := IsValidBarName(Trim(FLocalName));
+    end
+    else begin
+      lblWorkDir.Caption := FCaptionFolder;
+      edtWorkDir.Enabled := False;
+      edtWorkDir.ReadOnly := True;
+      edtWorkDir.TabStop := False;
+      edtWorkDir.Color := Self.Color;
+      edtWorkDir.Text := FWorkinDirectoryPath;
+      btnSetWorkDir.Visible := True;
+      btnCreate.Enabled := (FWorkinDirectoryPath <> '');
+    end;
+  finally
+    FUpdating := False;
+  end;
+end;
+
+procedure TBarCreatorWCl.rbModeClick(Sender: TObject);
+begin
+  UpdateMode;
+end;
+
+procedure TBarCreatorWCl.edtWorkDirChange(Sender: TObject);
+begin
+  if FUpdating or (not rbLocalDir.Checked) then Exit;
+  FLocalName := Trim(edtWorkDir.Text);
+  btnCreate.Enabled := IsValidBarName(FLocalName);
 end;
 
 procedure TBarCreatorWCl.FormCreate(Sender: TObject);
@@ -156,6 +260,8 @@ begin
 
   InitiatedAppDir := ExtractFilePath(Application.ExeName) + DN_SHARED_BARS;
   InitiatedUserDir := GetLinkbarRoamingFolderPath + DN_USER_BARS;
+  InitiatedLocalDir := ExtractFilePath(Application.ExeName) + DN_LOCAL_BARS;
+  FLocalName := GetDefaultLocalName;
 
   FName := TGuid.NewGuid.ToString + EXT_LBR;
 
@@ -168,10 +274,14 @@ begin
   then rbUserDir.Caption := Format(rbUserDir.Caption,[username]);
 
   Label1.ShowHint := True;
-  Label1.Hint := RemovePrefix(rbAppDir.Caption)
+  Label1.Hint := RemovePrefix(rbLocalDir.Caption)
+    + sLineBreak + '    ' + InitiatedLocalDir
+    + sLineBreak + RemovePrefix(rbAppDir.Caption)
     + sLineBreak + '    ' + InitiatedAppDir
     + sLineBreak + RemovePrefix(rbUserDir.Caption)
     + sLineBreak + '    ' + InitiatedUserDir;
+
+  UpdateMode;
 end;
 
 procedure TBarCreatorWCl.UpdateThemeStyle;
@@ -191,7 +301,8 @@ begin
 
   Label1.Font := Font;
   GetTitleFont(Label1.Font);
-  rbAppDir.Top := Label1.BoundsRect.Bottom + d;
+  rbLocalDir.Top := Label1.BoundsRect.Bottom + d;
+  rbAppDir.Top := rbLocalDir.BoundsRect.Bottom + d;
   rbUserDir.Top := rbAppDir.BoundsRect.Bottom + d;
   lblWorkDir.Font := Label1.Font;
   lblWorkDir.Top := rbUserDir.BoundsRect.Bottom + d;

@@ -1,10 +1,10 @@
 object BarCreatorWCl: TBarCreatorWCl
   Left = 0
   Top = 0
-  ActiveControl = rbAppDir
+  ActiveControl = rbLocalDir
   BorderIcons = [biSystemMenu]
   Caption = 'New linkbar'
-  ClientHeight = 162
+  ClientHeight = 185
   ClientWidth = 420
   Color = clBtnFace
   DefaultMonitor = dmMainForm
@@ -18,12 +18,12 @@ object BarCreatorWCl: TBarCreatorWCl
   OnCreate = FormCreate
   DesignSize = (
     420
-    162)
+    185)
   PixelsPerInch = 96
   TextHeight = 14
   object lblWorkDir: TLabel
     Left = 8
-    Top = 75
+    Top = 98
     Width = 89
     Height = 14
     Caption = 'Choose a folder:'
@@ -37,18 +37,18 @@ object BarCreatorWCl: TBarCreatorWCl
   end
   object btnSetWorkDir: TButton
     Left = 379
-    Top = 94
+    Top = 117
     Width = 33
     Height = 22
     Anchors = [akTop, akRight]
     Caption = '...'
-    TabOrder = 2
+    TabOrder = 3
     OnClick = Button1Click
     ExplicitLeft = 383
   end
   object edtWorkDir: TEdit
     Left = 8
-    Top = 94
+    Top = 117
     Width = 365
     Height = 22
     TabStop = False
@@ -56,43 +56,56 @@ object BarCreatorWCl: TBarCreatorWCl
     Color = clBtnFace
     Enabled = False
     ReadOnly = True
-    TabOrder = 3
+    TabOrder = 4
+    OnChange = edtWorkDirChange
     ExplicitWidth = 369
   end
-  object rbAppDir: TRadioButton
+  object rbLocalDir: TRadioButton
     Left = 8
     Top = 27
     Width = 404
     Height = 17
     Anchors = [akLeft, akTop, akRight]
-    Caption = '&Anyone who uses this computer (all users)'
+    Caption = '&Local path (portable, next to the application)'
     Checked = True
     TabOrder = 0
     TabStop = True
+    OnClick = rbModeClick
     ExplicitWidth = 408
   end
-  object rbUserDir: TRadioButton
+  object rbAppDir: TRadioButton
     Left = 8
     Top = 50
     Width = 404
     Height = 17
     Anchors = [akLeft, akTop, akRight]
-    Caption = 'Only for &me (%s)'
+    Caption = '&Anyone who uses this computer (all users)'
     TabOrder = 1
-    TabStop = True
+    OnClick = rbModeClick
+    ExplicitWidth = 408
+  end
+  object rbUserDir: TRadioButton
+    Left = 8
+    Top = 73
+    Width = 404
+    Height = 17
+    Anchors = [akLeft, akTop, akRight]
+    Caption = 'Only for &me (%s)'
+    TabOrder = 2
+    OnClick = rbModeClick
     ExplicitWidth = 408
   end
   object Panel1: TPanel
     Left = 0
-    Top = 121
+    Top = 144
     Width = 420
     Height = 41
     Align = alBottom
     BevelOuter = bvNone
     ParentBackground = False
     ShowCaption = False
-    TabOrder = 4
-    ExplicitTop = 118
+    TabOrder = 5
+    ExplicitTop = 141
     ExplicitWidth = 424
     DesignSize = (
       420
