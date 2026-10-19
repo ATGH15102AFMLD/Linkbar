@@ -446,7 +446,7 @@ begin
   if (FStayOnTop)
   then desktop := 0
   else desktop := FindWindowEx(FindWindow('Progman', 'Program Manager'), 0, 'SHELLDLL_DefView', '');
-  SetWindowLong(FHandle, GWL_HWNDPARENT, desktop);
+  SetWindowLongPtr(FHandle, GWL_HWNDPARENT, LONG_PTR(desktop));
 end;
 
 function TAccessBar.GetIsVertical: boolean;

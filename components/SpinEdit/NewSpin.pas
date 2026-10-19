@@ -381,12 +381,12 @@ procedure TnSpinEdit.SetEditRect;
 var
   Loc: TRect;
 begin
-  SendMessage(Handle, EM_GETRECT, 0, LongInt(@Loc));
+  SendMessage(Handle, EM_GETRECT, 0, LPARAM(@Loc));
   Loc.Bottom := ClientHeight + 1;  {+1 is workaround for windows paint bug}
   Loc.Right := ClientWidth - FButton.Width - 2;
   Loc.Top := 0;
   Loc.Left := 0;
-  SendMessage(Handle, EM_SETRECTNP, 0, LongInt(@Loc));
+  SendMessage(Handle, EM_SETRECTNP, 0, LPARAM(@Loc));
 end;
 
 procedure TnSpinEdit.WMSize(var Message: TWMSize);
